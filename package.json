@@ -1,0 +1,47 @@
+{
+  "name": "supermarket-backend",
+  "private": true,
+  "packageManager": "npm@10.9.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/server.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --external:'@nestjs/websockets/*' --external:@nestjs/microservices --external:'@nestjs/microservices/*' --external:@nestjs/platform-socket.io --external:class-transformer --external:class-validator",
+    "composer:deploy": "prisma deploy module.ts",
+    "composer:dev": "prisma dev module.ts",
+    "contract:emit": "prisma contract emit",
+    "db:init": "prisma db init",
+    "db:update": "prisma db update",
+    "db:verify": "prisma db verify",
+    "deploy": "npm run build && npm run composer:deploy",
+    "dev": "tsx watch src/main.ts",
+    "dev:composer": "npm run build && npm run composer:dev",
+    "migrate": "prisma db migrate",
+    "migration:plan": "prisma migration plan",
+    "migration:show": "prisma migration show",
+    "migration:status": "prisma migration status",
+    "skills:sync": "prisma skills sync || exit 0",
+    "start": "node dist/server.mjs",
+    "postinstall": "prisma skills sync || exit 0"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.17",
+    "@nestjs/core": "^11.1.17",
+    "@nestjs/platform-express": "^11.1.17",
+    "@prisma/composer": "0.16.0",
+    "@prisma/composer-prisma-cloud": "0.16.0",
+    "@prisma/orm-postgres": "8.0.0-rc.8",
+    "alchemy": "2.0.0-beta.74",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "temporal-polyfill": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "esbuild": "^0.28.1",
+    "prisma": "8.0.0-rc.12",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "effect": "4.0.0-rc.112"
+  }
+}
