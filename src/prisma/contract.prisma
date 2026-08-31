@@ -1,21 +1,1336 @@
 // use prisma-next
+// ================================================================
+// SUPERETTE - PRISMA 8 DATA CONTRACT
+// Version: 1.0.1
+// Database: PostgreSQL
+// Currency: XAF / FCFA
+//
+// IMPORTANT:
+// This file is the source of truth.
+// Generated artifacts must NOT be edited manually.
+//
+// After modifying this file:
+//
+//   npx prisma@latest contract emit
+//
+// Then plan a migration:
+//
+//   npx prisma@latest migration plan --name <migration-name>
+//
+// ================================================================
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  username  String?
-  name      String?
-  posts     Post[]
-  createdAt TimestamptzString @default(now())
-  updatedAt temporal.updatedAtString()
+// ---------------------------------------------------------------
+// UUID
+// ---------------------------------------------------------------
+
+// ================================================================
+// ENUMS
+// ================================================================
+
+// ---------------------------------------------------------------
+// User / Access
+// ---------------------------------------------------------------
+
+enum UserStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  INVITED
+  SUSPENDED
+  BLOCKED
+  INACTIVE
+  ARCHIVED
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  author    User     @relation(fields: [authorId], references: [id])
-  authorId  Int
-  createdAt TimestamptzString @default(now())
-  updatedAt temporal.updatedAtString()
+enum RoleCode {
+  @@type("pg/text@1")
+  SUPER_ADMIN
+  ADMIN
+  STORE_MANAGER
+  CASHIER
+  STOCK_MANAGER
+  PURCHASING_MANAGER
+  SALES_MANAGER
+  ACCOUNTANT
+  DELIVERY_AGENT
+  AUDITOR
+  CUSTOMER
+}
+
+enum PermissionAction {
+  @@type("pg/text@1")
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  CANCEL
+  REFUND
+  EXPORT
+  PRINT
+  OPEN
+  CLOSE
+  ADJUST
+  TRANSFER
+}
+
+enum PermissionResource {
+  @@type("pg/text@1")
+  USERS
+  ROLES
+  PERMISSIONS
+  ORGANIZATIONS
+  STORES
+  PRODUCTS
+  CATEGORIES
+  BRANDS
+  PRICES
+  SUPPLIERS
+  PURCHASE_ORDERS
+  GOODS_RECEIPTS
+  STOCK
+  INVENTORIES
+  CUSTOMERS
+  ORDERS
+  SALES
+  CASH_REGISTERS
+  CASH_SESSIONS
+  CASH_MOVEMENTS
+  PAYMENTS
+  RECEIPTS
+  INVOICES
+  DELIVERIES
+  REPORTS
+  AUDIT_LOGS
+}
+
+// ---------------------------------------------------------------
+// Organization
+// ---------------------------------------------------------------
+
+enum OrganizationStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum StoreStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  TEMPORARILY_CLOSED
+  SUSPENDED
+  CLOSED
+}
+
+// ---------------------------------------------------------------
+// Product
+// ---------------------------------------------------------------
+
+enum ProductStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+  ARCHIVED
+}
+
+enum ProductType {
+  @@type("pg/text@1")
+  STANDARD
+  WEIGHTED
+  SERVICE
+  COMBO
+}
+
+enum UnitType {
+  @@type("pg/text@1")
+  PIECE
+  KILOGRAM
+  GRAM
+  LITER
+  MILLILITER
+  METER
+  PACK
+  BOX
+  BOTTLE
+  CAN
+}
+
+// ---------------------------------------------------------------
+// Purchase
+// ---------------------------------------------------------------
+
+enum PurchaseOrderStatus {
+  @@type("pg/text@1")
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+enum GoodsReceiptStatus {
+  @@type("pg/text@1")
+  DRAFT
+  RECEIVED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------
+// Stock
+// ---------------------------------------------------------------
+
+enum StockMovementType {
+  @@type("pg/text@1")
+  PURCHASE_RECEIPT
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  INVENTORY_CORRECTION
+  DAMAGED
+  EXPIRED
+  LOST
+}
+
+enum StockAdjustmentStatus {
+  @@type("pg/text@1")
+  DRAFT
+  SUBMITTED
+  APPROVED
+  APPLIED
+  CANCELLED
+}
+
+enum InventoryCountStatus {
+  @@type("pg/text@1")
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------
+// Customer
+// ---------------------------------------------------------------
+
+enum CustomerStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  ARCHIVED
+}
+
+enum CustomerType {
+  @@type("pg/text@1")
+  INDIVIDUAL
+  BUSINESS
+}
+
+// ---------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------
+
+enum OrderChannel {
+  @@type("pg/text@1")
+  POS
+  DESKTOP
+  MOBILE
+  WEB
+  PHONE
+}
+
+enum FulfillmentType {
+  @@type("pg/text@1")
+  IN_STORE
+  PICKUP
+  DELIVERY
+}
+
+enum OrderStatus {
+  @@type("pg/text@1")
+  DRAFT
+  PENDING
+  CONFIRMED
+  PROCESSING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderItemStatus {
+  @@type("pg/text@1")
+  PENDING
+  PREPARED
+  CANCELLED
+  FULFILLED
+}
+
+// ---------------------------------------------------------------
+// Delivery
+// ---------------------------------------------------------------
+
+enum DeliveryStatus {
+  @@type("pg/text@1")
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryFailureReason {
+  @@type("pg/text@1")
+  CUSTOMER_UNAVAILABLE
+  WRONG_ADDRESS
+  CUSTOMER_REFUSED
+  VEHICLE_PROBLEM
+  WEATHER
+  OTHER
+}
+
+// ---------------------------------------------------------------
+// Cash Register
+// ---------------------------------------------------------------
+
+enum CashRegisterStatus {
+  @@type("pg/text@1")
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum CashSessionStatus {
+  @@type("pg/text@1")
+  OPEN
+  CLOSED
+  FORCE_CLOSED
+}
+
+enum CashMovementType {
+  @@type("pg/text@1")
+  OPENING_FLOAT
+  CASH_SALE
+  CASH_REFUND
+  CASH_IN
+  CASH_OUT
+  EXPENSE
+  SAFE_DEPOSIT
+  CASH_CORRECTION
+}
+
+// ---------------------------------------------------------------
+// Payment
+// ---------------------------------------------------------------
+
+enum PaymentMethod {
+  @@type("pg/text@1")
+  CASH
+  MTN_MOMO
+  AIRTEL_MONEY
+  CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+enum PaymentStatus {
+  @@type("pg/text@1")
+  PENDING
+  PROCESSING
+  CONFIRMED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentDirection {
+  @@type("pg/text@1")
+  IN
+  OUT
+}
+
+// ---------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------
+
+enum DocumentStatus {
+  @@type("pg/text@1")
+  ISSUED
+  CANCELLED
+}
+
+enum InvoiceType {
+  @@type("pg/text@1")
+  SALE
+  CREDIT_NOTE
+}
+
+enum ReceiptType {
+  @@type("pg/text@1")
+  SALE
+  REFUND
+}
+
+// ---------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------
+
+enum AuditAction {
+  @@type("pg/text@1")
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  CANCEL
+  REFUND
+  OPEN_SESSION
+  CLOSE_SESSION
+  STOCK_ADJUSTMENT
+  PAYMENT
+  OTHER
+}
+
+// ================================================================
+// IDENTITY & ACCESS
+// ================================================================
+
+model User {
+  id              Uuid       @id @default(uuid())
+  email           String     @unique
+  phone           String?    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  displayName     String?
+  status          UserStatus @default(ACTIVE)
+  lastLoginAt     DateTime?
+  passwordChangedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       temporal.updatedAt()
+
+  roles            UserRole[]
+  storeMemberships StoreUser[]
+  auditLogs        AuditLog[]
+  cashierSessions  CashierSession[]
+  createdOrders    Order[]             @relation("OrderCreatedBy")
+  assignedDeliveries Delivery[]        @relation("DeliveryAgent")
+  approvedAdjustments StockAdjustment[] @relation("StockAdjustmentApprovedBy")
+  createdAdjustments StockAdjustment[] @relation("StockAdjustmentCreatedBy")
+  approvedInventories InventoryCount[]  @relation("InventoryApprovedBy")
+  createdInventories InventoryCount[]  @relation("InventoryCreatedBy")
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  approvedPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderApprovedBy")
+
+  @@index([status])
+  @@index([lastName, firstName])
+  @@map("users")
+}
+
+model Role {
+  id          Uuid       @id @default(uuid())
+  code        RoleCode   @unique
+  name        String
+  description String?
+  isSystem    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   temporal.updatedAt()
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Uuid              @id @default(uuid())
+  resource    PermissionResource
+  action      PermissionAction
+  name        String
+  description String?
+  createdAt   DateTime          @default(now())
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId     Uuid
+  roleId     Uuid
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       Uuid
+  permissionId Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ================================================================
+// ORGANIZATION
+// ================================================================
+
+model Organization {
+  id          Uuid               @id @default(uuid())
+  name        String
+  legalName   String?
+  slug        String             @unique
+  phone       String?
+  email       String?
+  address     String?
+  city        String?
+  country     String             @default("CG")
+  currency    String             @default("XAF")
+  status      OrganizationStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now())
+  updatedAt   temporal.updatedAt()
+
+  stores Store[]
+
+  @@index([status])
+  @@map("organizations")
+}
+
+model Store {
+  id             Uuid        @id @default(uuid())
+  organizationId Uuid
+  code           String
+  name           String
+  phone          String?
+  email          String?
+  address        String?
+  city           String?
+  status         StoreStatus @default(ACTIVE)
+  createdAt      DateTime    @default(now())
+  updatedAt      temporal.updatedAt()
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  users           StoreUser[]
+  productsPrices  ProductPrice[]
+  stocks          Stock[]
+  purchaseOrders  PurchaseOrder[]
+  goodsReceipts   GoodsReceipt[]
+  customers       Customer[]
+  orders          Order[]
+  sales           Sale[]
+  cashRegisters   CashRegister[]
+  deliveries      Delivery[]
+  inventoryCounts InventoryCount[]
+  auditLogs       AuditLog[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([status])
+  @@map("stores")
+}
+
+model StoreUser {
+  storeId    Uuid
+  userId     Uuid
+  assignedAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([storeId, userId])
+  @@index([userId])
+  @@map("store_users")
+}
+
+// ================================================================
+// CATALOG
+// ================================================================
+
+model Category {
+  id          Uuid       @id @default(uuid())
+  parentId    Uuid?
+  name        String
+  slug        String     @unique
+  description String?
+  status      ProductStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   temporal.updatedAt()
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@index([status])
+  @@map("categories")
+}
+
+model Brand {
+  id          Uuid       @id @default(uuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   temporal.updatedAt()
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model Product {
+  id              Uuid          @id @default(uuid())
+  categoryId      Uuid?
+  brandId         Uuid?
+  sku             String        @unique
+  name            String
+  slug            String        @unique
+  description     String?
+  productType     ProductType   @default(STANDARD)
+  unitType        UnitType      @default(PIECE)
+  status          ProductStatus @default(ACTIVE)
+  costPrice       Numeric(14, 2)
+  taxRate         Numeric(5, 2)
+  reorderLevel    Numeric(14, 3)
+  minimumStock    Numeric(14, 3)
+  maximumStock    Decimal?
+  imageUrl        String?
+  createdAt       DateTime      @default(now())
+  updatedAt       temporal.updatedAt()
+
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  barcodes       ProductBarcode[]
+  prices         ProductPrice[]
+  images         ProductImage[]
+  stocks         Stock[]
+  stockMovements StockMovement[]
+  purchaseItems  PurchaseOrderItem[]
+  receiptItems   GoodsReceiptItem[]
+  orderItems     OrderItem[]
+  saleItems      SaleItem[]
+  inventoryItems InventoryCountItem[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  @@index([name])
+  @@map("products")
+}
+
+model ProductBarcode {
+  id        Uuid   @id @default(uuid())
+  productId Uuid
+  barcode   String
+  isPrimary Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([barcode])
+  @@index([productId])
+  @@map("product_barcodes")
+}
+
+model ProductPrice {
+  id          Uuid      @id @default(uuid())
+  productId   Uuid
+  storeId     Uuid
+  sellingPrice Numeric(14, 2)
+  validFrom   DateTime  @default(now())
+  validUntil  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   temporal.updatedAt()
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([productId, storeId])
+  @@index([storeId, validFrom])
+  @@map("product_prices")
+}
+
+model ProductImage {
+  id        Uuid      @id @default(uuid())
+  productId Uuid
+  url       String
+  altText   String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// ================================================================
+// SUPPLIERS / PURCHASES
+// ================================================================
+
+model Supplier {
+  id          Uuid       @id @default(uuid())
+  name        String
+  code        String     @unique
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  city        String?
+  taxNumber   String?
+  status      CustomerStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   temporal.updatedAt()
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([status])
+  @@index([name])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id           Uuid               @id @default(uuid())
+  storeId      Uuid
+  supplierId   Uuid
+  createdById  Uuid
+  approvedById Uuid?
+  reference    String             @unique
+  status       PurchaseOrderStatus @default(DRAFT)
+  orderedAt    DateTime?
+  approvedAt   DateTime?
+  expectedAt   DateTime?
+  notes        String?
+  subtotal     Numeric(14, 2)
+  taxAmount    Numeric(14, 2)
+  totalAmount  Numeric(14, 2)
+  createdAt    DateTime            @default(now())
+  updatedAt    temporal.updatedAt()
+
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy  User     @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?    @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  items         PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
+
+  @@index([storeId, status])
+  @@index([supplierId])
+  @@index([createdById])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id             Uuid    @id @default(uuid())
+  purchaseOrderId Uuid
+  productId      Uuid
+  quantity       Numeric(14, 3)
+  unitCost       Numeric(14, 2)
+  taxRate        Numeric(5, 2)
+  subtotal       Numeric(14, 2)
+  createdAt      DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id             Uuid               @id @default(uuid())
+  storeId        Uuid
+  purchaseOrderId Uuid?
+  reference      String             @unique
+  status         GoodsReceiptStatus @default(DRAFT)
+  receivedAt     DateTime?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      temporal.updatedAt()
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+
+  items GoodsReceiptItem[]
+
+  @@index([storeId, status])
+  @@index([purchaseOrderId])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id             Uuid    @id @default(uuid())
+  goodsReceiptId Uuid
+  productId      Uuid
+  quantity       Numeric(14, 3)
+  unitCost       Numeric(14, 2)
+  subtotal       Numeric(14, 2)
+  createdAt      DateTime @default(now())
+
+  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([goodsReceiptId])
+  @@index([productId])
+  @@map("goods_receipt_items")
+}
+
+// ================================================================
+// STOCK
+// ================================================================
+
+model Stock {
+  id             Uuid    @id @default(uuid())
+  storeId        Uuid
+  productId      Uuid
+  quantity       Numeric(14, 3)
+  reservedQty    Numeric(14, 3)
+  availableQty   Numeric(14, 3)
+  updatedAt      temporal.updatedAt()
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId])
+  @@index([productId])
+  @@map("stocks")
+}
+
+model StockMovement {
+  id             Uuid              @id @default(uuid())
+  storeId        Uuid
+  productId      Uuid
+  type           StockMovementType
+  quantity       Numeric(14, 3)
+  unitCost       Numeric(14, 2)?
+  referenceType  String?
+  referenceId    Uuid?
+  previousQty    Numeric(14, 3)
+  resultingQty   Numeric(14, 3)
+  notes          String?
+  createdAt      DateTime          @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([storeId, createdAt])
+  @@index([productId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+model StockAdjustment {
+  id           Uuid                  @id @default(uuid())
+  storeId      Uuid
+  createdById  Uuid
+  approvedById Uuid?
+  reference    String                @unique
+  status       StockAdjustmentStatus @default(DRAFT)
+  reason       String
+  notes        String?
+  approvedAt   DateTime?
+  appliedAt    DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    temporal.updatedAt()
+
+  store      Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdBy  User  @relation("StockAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User? @relation("StockAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  items StockAdjustmentItem[]
+
+  @@index([storeId, status])
+  @@index([createdById])
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentItem {
+  id               Uuid    @id @default(uuid())
+  stockAdjustmentId Uuid
+  productId        Uuid
+  previousQuantity Numeric(14, 3)
+  newQuantity      Numeric(14, 3)
+  difference       Numeric(14, 3)
+  reason           String?
+
+  adjustment StockAdjustment @relation(fields: [stockAdjustmentId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([stockAdjustmentId])
+  @@index([productId])
+  @@map("stock_adjustment_items")
+}
+
+model InventoryCount {
+  id           Uuid                 @id @default(uuid())
+  storeId      Uuid
+  createdById  Uuid
+  approvedById Uuid?
+  reference    String               @unique
+  status       InventoryCountStatus @default(DRAFT)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  approvedAt   DateTime?
+  notes        String?
+  createdAt    DateTime             @default(now())
+  updatedAt    temporal.updatedAt()
+
+  store      Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdBy  User  @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User? @relation("InventoryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  items InventoryCountItem[]
+
+  @@index([storeId, status])
+  @@map("inventory_counts")
+}
+
+model InventoryCountItem {
+  id              Uuid    @id @default(uuid())
+  inventoryCountId Uuid
+  productId       Uuid
+  expectedQty     Numeric(14, 3)
+  countedQty      Numeric(14, 3)
+  difference      Numeric(14, 3)
+  createdAt       DateTime @default(now())
+
+  inventory InventoryCount @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([inventoryCountId, productId])
+  @@index([productId])
+  @@map("inventory_count_items")
+}
+
+// ================================================================
+// CUSTOMERS
+// ================================================================
+
+model Customer {
+  id          Uuid           @id @default(uuid())
+  storeId     Uuid
+  customerNo  String
+  type        CustomerType   @default(INDIVIDUAL)
+  firstName   String?
+  lastName    String?
+  companyName String?
+  phone       String?
+  email       String?
+  status      CustomerStatus @default(ACTIVE)
+  createdAt   DateTime       @default(now())
+  updatedAt   temporal.updatedAt()
+
+  store     Store             @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  addresses CustomerAddress[]
+  orders    Order[]
+
+  @@unique([storeId, customerNo])
+  @@index([storeId, status])
+  @@index([phone])
+  @@index([email])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id         Uuid    @id @default(uuid())
+  customerId Uuid
+  label      String?
+  recipient  String
+  phone      String?
+  address    String
+  city       String
+  district   String?
+  landmark   String?
+  latitude   Numeric(10, 7)?
+  longitude  Numeric(10, 7)?
+  isDefault  Boolean @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  temporal.updatedAt()
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deliveries Delivery[]
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+// ================================================================
+// ORDERS
+// ================================================================
+
+model Order {
+  id             Uuid            @id @default(uuid())
+  storeId        Uuid
+  customerId     Uuid?
+  createdById    Uuid?
+  reference      String          @unique
+  channel        OrderChannel    @default(POS)
+  fulfillment    FulfillmentType @default(IN_STORE)
+  status         OrderStatus     @default(DRAFT)
+
+  subtotal       Numeric(14, 2)
+  discountAmount Numeric(14, 2)
+  taxAmount      Numeric(14, 2)
+  deliveryFee    Numeric(14, 2)
+  totalAmount    Numeric(14, 2)
+
+  notes          String?
+  confirmedAt    DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      temporal.updatedAt()
+
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  items     OrderItem[]
+  payments  Payment[]
+  delivery  Delivery?
+  sale      Sale?
+  receipt   Receipt?
+  invoice   Invoice?
+
+  @@index([storeId, status, createdAt])
+  @@index([customerId])
+  @@index([createdById])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             Uuid           @id @default(uuid())
+  orderId        Uuid
+  productId      Uuid
+  productName    String
+  sku            String
+  quantity       Numeric(14, 3)
+  unitPrice      Numeric(14, 2)
+  discountAmount Numeric(14, 2)
+  taxRate        Numeric(5, 2)
+  subtotal       Numeric(14, 2)
+  totalAmount    Numeric(14, 2)
+  status         OrderItemStatus @default(PENDING)
+  createdAt      DateTime       @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// ================================================================
+// DELIVERY
+// ================================================================
+
+model Delivery {
+  id                Uuid                 @id @default(uuid())
+  orderId           Uuid                 @unique
+  storeId           Uuid
+  addressId         Uuid?
+  agentId           Uuid?
+  status            DeliveryStatus      @default(PENDING)
+  failureReason     DeliveryFailureReason?
+  deliveryFee       Numeric(14, 2)
+  scheduledAt       DateTime?
+  assignedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  notes             String?
+  createdAt         DateTime              @default(now())
+  updatedAt         temporal.updatedAt()
+
+  order   Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  store   Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  address CustomerAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  agent   User?            @relation("DeliveryAgent", fields: [agentId], references: [id], onDelete: SetNull)
+
+  statusHistory DeliveryStatusHistory[]
+
+  @@index([storeId, status])
+  @@index([agentId, status])
+  @@map("deliveries")
+}
+
+model DeliveryStatusHistory {
+  id         Uuid           @id @default(uuid())
+  deliveryId Uuid
+  status     DeliveryStatus
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+  @@map("delivery_status_history")
+}
+
+// ================================================================
+// CASH REGISTER
+// ================================================================
+
+model CashRegister {
+  id        Uuid               @id @default(uuid())
+  storeId   Uuid
+  code      String
+  name      String
+  status    CashRegisterStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+  updatedAt temporal.updatedAt()
+
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  sessions CashierSession[]
+
+  @@unique([storeId, code])
+  @@index([storeId, status])
+  @@map("cash_registers")
+}
+
+model CashierSession {
+  id             Uuid              @id @default(uuid())
+  cashRegisterId Uuid
+  cashierId      Uuid
+  status         CashSessionStatus @default(OPEN)
+  openingAmount  Numeric(14, 2)
+  expectedAmount Numeric(14, 2)
+  actualAmount   Decimal?
+  difference     Decimal?
+  openedAt       DateTime          @default(now())
+  closedAt       DateTime?
+  notes          String?
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  cashier      User         @relation(fields: [cashierId], references: [id], onDelete: Restrict)
+
+  sales        Sale[]
+  movements    CashMovement[]
+  payments     Payment[]
+  closing      CashSessionClosing?
+
+  @@index([cashRegisterId, status])
+  @@index([cashierId, status])
+  @@map("cashier_sessions")
+}
+
+model CashMovement {
+  id               Uuid             @id @default(uuid())
+  sessionId        Uuid
+  type             CashMovementType
+  amount           Numeric(14, 2)
+  reason           String?
+  referenceType    String?
+  referenceId      Uuid?
+  createdAt        DateTime         @default(now())
+
+  session CashierSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("cash_movements")
+}
+
+model CashSessionClosing {
+  id            Uuid     @id @default(uuid())
+  sessionId     Uuid     @unique
+  totalSales    Numeric(14, 2)
+  totalCash     Numeric(14, 2)
+  totalRefunds  Numeric(14, 2)
+  totalCashIn   Numeric(14, 2)
+  totalCashOut  Numeric(14, 2)
+  expectedCash  Numeric(14, 2)
+  actualCash    Numeric(14, 2)
+  difference    Numeric(14, 2)
+  closedAt     DateTime @default(now())
+  notes        String?
+
+  session CashierSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("cash_session_closings")
+}
+
+// ================================================================
+// SALES
+// ================================================================
+
+model Sale {
+  id             Uuid     @id @default(uuid())
+  orderId        Uuid     @unique
+  storeId        Uuid
+  sessionId      Uuid?
+  reference      String   @unique
+  subtotal       Numeric(14, 2)
+  discountAmount Numeric(14, 2)
+  taxAmount      Numeric(14, 2)
+  totalAmount    Numeric(14, 2)
+  soldAt         DateTime @default(now())
+
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  session CashierSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  items    SaleItem[]
+  payments Payment[]
+
+  @@index([storeId, soldAt])
+  @@index([sessionId, soldAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id             Uuid    @id @default(uuid())
+  saleId         Uuid
+  productId      Uuid
+  productName    String
+  sku            String
+  quantity       Numeric(14, 3)
+  unitPrice      Numeric(14, 2)
+  discountAmount Numeric(14, 2)
+  taxAmount      Numeric(14, 2)
+  totalAmount    Numeric(14, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+// ================================================================
+// PAYMENTS
+// ================================================================
+
+model Payment {
+  id             Uuid            @id @default(uuid())
+  orderId        Uuid?
+  saleId         Uuid?
+  sessionId      Uuid?
+  reference      String          @unique
+  method         PaymentMethod
+  direction      PaymentDirection @default(IN)
+  status         PaymentStatus   @default(PENDING)
+  amount         Numeric(14, 2)
+  currency       String          @default("XAF")
+  transactionRef  String?
+  providerRef    String?
+  paidAt         DateTime?
+  failureReason  String?
+  metadata       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      temporal.updatedAt()
+
+  order   Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  sale    Sale?           @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  session CashierSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+  @@index([saleId, status])
+  @@index([sessionId, createdAt])
+  @@index([method, status])
+  @@index([transactionRef])
+  @@map("payments")
+}
+
+// ================================================================
+// RECEIPTS / INVOICES
+// ================================================================
+
+model Receipt {
+  id          Uuid           @id @default(uuid())
+  orderId     Uuid           @unique
+  receiptNo   String         @unique
+  type        ReceiptType    @default(SALE)
+  status      DocumentStatus @default(ISSUED)
+  issuedAt    DateTime       @default(now())
+  subtotal    Numeric(14, 2)
+  discount    Numeric(14, 2)
+  tax         Numeric(14, 2)
+  total       Numeric(14, 2)
+  pdfUrl      String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([issuedAt])
+  @@map("receipts")
+}
+
+model Invoice {
+  id            Uuid           @id @default(uuid())
+  orderId       Uuid           @unique
+  invoiceNo     String         @unique
+  type          InvoiceType    @default(SALE)
+  status        DocumentStatus @default(ISSUED)
+  issuedAt      DateTime       @default(now())
+  dueAt         DateTime?
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
+  subtotal      Numeric(14, 2)
+  discount      Numeric(14, 2)
+  tax           Numeric(14, 2)
+  total         Numeric(14, 2)
+  pdfUrl        String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([issuedAt])
+  @@map("invoices")
+}
+
+// ================================================================
+// AUDIT
+// ================================================================
+
+model AuditLog {
+  id           Uuid       @id @default(uuid())
+  userId       Uuid?
+  storeId      Uuid?
+  action       AuditAction
+  resource     String
+  resourceId   Uuid?
+  description  String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     String?
+  createdAt    DateTime   @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([resource, resourceId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }

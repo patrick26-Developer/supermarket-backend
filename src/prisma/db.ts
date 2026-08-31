@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import postgres from "@prisma/orm-postgres/runtime";
 
 import "temporal-polyfill/global";
