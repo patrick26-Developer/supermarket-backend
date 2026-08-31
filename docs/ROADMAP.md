@@ -32,12 +32,16 @@ Ces trois pièges sont invisibles à la compilation (`tsc --noEmit` passe), ils 
 
 Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur `db.orm.public.<Model>` :
 
-1. **Organizations / Stores** — CRUD minimal (souvent un seul tenant au départ).
-2. **Users / Roles** — gestion des comptes employés depuis l'app desktop (un admin crée les caissiers).
-3. **Catalogue** — `Category`, `Brand`, `Product`, `ProductBarcode`, `ProductPrice` : lecture pour la caisse (recherche par code-barres/SKU), écriture pour la gestion de stock.
+1. **Organizations / Stores** — CRUD minimal (souvent un seul tenant au départ). *Pas encore fait — l'org/store par défaut du seed suffit pour l'instant.*
+2. **Users / Roles** — gestion des comptes employés depuis l'app desktop (un admin crée les caissiers). *Pas encore fait.*
+3. [x] **Catalogue** — `Category`, `Brand`, `Product` : CRUD complet + `GET /products?search=` + `GET /products/code/:code` (lookup SKU/code-barres pour la caisse). Testé de bout en bout le 2026-08-31 (voir PROGRESS.md). `ProductBarcode` (codes-barres multiples) et `ProductPrice` (prix par magasin) **restent à faire** — le lookup actuel ne couvre que le SKU exact, pas encore une table de codes-barres dédiée.
 4. **Stock** — `Stock` (quantité par magasin/produit), `StockMovement` en écriture append-only à chaque mouvement.
 5. **Vente / Caisse** — `CashRegister`, `CashierSession` (ouverture/fermeture de caisse), `Sale`/`SaleItem`, `Payment` (au moins `CASH` pour commencer). C'est le flux transactionnel critique : à envelopper dans `db.transaction(...)` (débit stock + création vente + mouvement de caisse atomiques).
 6. **Reçus** — génération `Receipt` a minima en base ; l'impression/PDF peut venir plus tard.
+
+### Note d'implémentation — champs `Numeric`/`Decimal`
+
+Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Exemple dans `products.service.ts`. À répéter pour `Stock`, `Sale`, `Payment`, etc.
 
 ## Phase 2 — Modules étendus
 

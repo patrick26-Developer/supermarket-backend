@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "Supermarket Backend",
+    "description": "Collection de test pour l'API supermarket-backend (auth + endpoints protégés). Importer avec l'environnement supermarket-backend.postman_environment.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Health check (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/",
+        "auth": { "type": "noauth" }
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  console.log('Tokens enregistrés pour', body.user.email, body.user.roles);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/refresh",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "Categories",
+          "item": [
+            { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/categories" } },
+            { "name": "Get one", "request": { "method": "GET", "url": "{{baseUrl}}/api/categories/:id" } },
+            {
+              "name": "Create",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('categoryId', pm.response.json().id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/categories",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Boissons\",\n  \"slug\": \"boissons\"\n}" }
+              }
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/categories/{{categoryId}}",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"description\": \"Sodas et jus\"\n}" }
+              }
+            },
+            { "name": "Delete", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/categories/{{categoryId}}" } }
+          ]
+        },
+        {
+          "name": "Brands",
+          "item": [
+            { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/brands" } },
+            { "name": "Get one", "request": { "method": "GET", "url": "{{baseUrl}}/api/brands/:id" } },
+            {
+              "name": "Create",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('brandId', pm.response.json().id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/brands",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Coca-Cola\",\n  \"slug\": \"coca-cola\"\n}" }
+              }
+            },
+            { "name": "Update", "request": { "method": "PUT", "url": "{{baseUrl}}/api/brands/{{brandId}}", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"description\": \"Boissons gazeuses\"\n}" } } },
+            { "name": "Delete", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/brands/{{brandId}}" } }
+          ]
+        },
+        {
+          "name": "Products",
+          "item": [
+            { "name": "List / search (?search=)", "request": { "method": "GET", "url": "{{baseUrl}}/api/products?search=coca" } },
+            { "name": "Get one", "request": { "method": "GET", "url": "{{baseUrl}}/api/products/:id" } },
+            { "name": "Lookup by SKU/barcode", "request": { "method": "GET", "url": "{{baseUrl}}/api/products/code/COCA-33CL" } },
+            {
+              "name": "Create",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('productId', pm.response.json().id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/products",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"sku\": \"COCA-33CL\",\n  \"name\": \"Coca-Cola 33cl\",\n  \"slug\": \"coca-cola-33cl\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"brandId\": \"{{brandId}}\",\n  \"costPrice\": 300,\n  \"taxRate\": 18,\n  \"reorderLevel\": 20,\n  \"minimumStock\": 10\n}"
+                }
+              }
+            },
+            { "name": "Update", "request": { "method": "PUT", "url": "{{baseUrl}}/api/products/{{productId}}", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"costPrice\": 320\n}" } } },
+            { "name": "Delete", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/products/{{productId}}" } }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "brandId", "value": "" },
+    { "key": "productId", "value": "" }
+  ]
+}

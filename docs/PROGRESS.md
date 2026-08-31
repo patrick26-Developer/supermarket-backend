@@ -2,6 +2,16 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-08-31 (suite 2) — Module Catalogue (Phase 1.3 roadmap)
+
+**Livré** : CRUD complet pour `Category`, `Brand`, `Product` (`src/catalog/`), protégé par `@RequirePermission` (déjà seedé pour tous les rôles). `GET /api/products?search=` (recherche par nom) et `GET /api/products/code/:code` (lookup code-barres → SKU, pensé pour la caisse) ajoutés. Contrôles d'unicité (slug/sku/nom) et de cohérence des FK (`categoryId`/`brandId` doivent exister) avant écriture.
+
+**Un nouveau piège de type découvert** : les colonnes `Numeric(P, S)` du contrat (prix, quantités) sont typées côté ORM comme une chaîne brandée (`Numeric<P, S> = string & {...}`), pas `number` — passer un `number` brut à `.create()`/`.update()` est rejeté par `tsc`. Résolu avec un helper `numeric<P, S>(value: number)` (`src/common/numeric.ts`) qui centralise la conversion ; les DTOs restent en `number` pour rester simples côté client JSON. Documenté dans `docs/ROADMAP.md`.
+
+**Testé de bout en bout** (serveur réel, DB réelle) : création catégorie/marque/produit en chaîne (avec FK), lecture avec les Decimal correctement formatés (`"300.00"`, `"18.00"`), recherche par nom, lookup par SKU (200 et 404), rejet 409 sur SKU dupliqué, rejet 400 sur champs requis manquants, 401 sans token, mise à jour, suppression avec vérification du comportement `onDelete: SetNull` (le produit garde `categoryId: null` après suppression de sa catégorie plutôt que d'échouer).
+
+**Collection Postman** (`docs/postman/supermarket-backend.postman_collection.json` + `.postman_environment.json`) créée : Login/Refresh/Me avec capture automatique des tokens en variables de collection, puis Users et Catalogue (Categories/Brands/Products), Create capturant l'id créé pour enchaîner Update/Delete sans copier-coller manuel.
+
 ## 2026-08-31 (suite) — Module d'authentification JWT + RBAC (Phase 0 roadmap)
 
 **Livré** : `AuthModule` complet — login email/mot de passe, access token (15 min) + refresh token (30 jours) via `@nestjs/jwt`, stratégie Passport (`JwtAccessStrategy`), guard global (`JwtAuthGuard`) avec bypass `@Public()`, guard RBAC générique (`PermissionsGuard` + `@RequirePermission(resource, action)`) résolu en base contre `Role`/`RolePermission`/`Permission`. `PrismaModule` global créé pour rendre `PrismaService`/`db` injectable partout. Préfixe `/api` activé (`/` reste public, hors préfixe, en health-check). Script `src/prisma/seed.ts` réécrit : organisation + magasin par défaut, 99 permissions (catalogue `RESOURCE_ACTIONS`), 11 rôles système, 402 habilitations rôle→permission (point de départ à affiner), compte admin initial (`npm run seed`).

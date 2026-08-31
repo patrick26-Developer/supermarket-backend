@@ -6,6 +6,7 @@ import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./auth/guards/permissions.guard";
+import { CatalogModule } from "./catalog/catalog.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
 import { UsersController } from "./users.controller";
@@ -16,6 +17,7 @@ import { UsersService } from "./users.service";
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
+    CatalogModule,
   ],
   controllers: [
     AppController,
