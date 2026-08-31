@@ -2,6 +2,37 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-08-31 (suite) — Module d'authentification JWT + RBAC (Phase 0 roadmap)
+
+**Livré** : `AuthModule` complet — login email/mot de passe, access token (15 min) + refresh token (30 jours) via `@nestjs/jwt`, stratégie Passport (`JwtAccessStrategy`), guard global (`JwtAuthGuard`) avec bypass `@Public()`, guard RBAC générique (`PermissionsGuard` + `@RequirePermission(resource, action)`) résolu en base contre `Role`/`RolePermission`/`Permission`. `PrismaModule` global créé pour rendre `PrismaService`/`db` injectable partout. Préfixe `/api` activé (`/` reste public, hors préfixe, en health-check). Script `src/prisma/seed.ts` réécrit : organisation + magasin par défaut, 99 permissions (catalogue `RESOURCE_ACTIONS`), 11 rôles système, 402 habilitations rôle→permission (point de départ à affiner), compte admin initial (`npm run seed`).
+
+**Trois bugs d'exécution découverts et corrigés** (invisibles à `tsc --noEmit`, qui passait sans erreur à chaque fois — seul un test HTTP réel les a révélés) :
+
+1. **Injection par type seul → `undefined` à l'exécution.** Ce projet transpile avec esbuild (tsx en dev, esbuild pour le build), qui n'émet pas `design:paramtypes`. `constructor(private readonly x: Service)` ne reçoit rien. Le scaffold `create-prisma` avait déjà contourné ça avec `@Inject(Token)` explicite partout (`users.service.ts`) — convention que mes premiers fichiers `auth/*` n'avaient pas suivie. Corrigé en ajoutant `@Inject()` explicite sur `JwtAccessStrategy`, `JwtAuthGuard`, `PermissionsGuard`, `AuthService`, `AuthController`.
+2. **`@Body() dto: LoginDto` sans réflexion de type = validation silencieusement sautée.** Même cause racine : `ValidationPipe` déduit le DTO à valider via le type réfléchi du paramètre ; sans métadonnée il retombe sur `Object` et laisse passer le payload tel quel (aucune erreur — `POST /auth/login` sans `password` plantait en 500 dans `bcrypt.compare(undefined, ...)` au lieu de renvoyer un 400 propre). Corrigé avec un pipe dédié, `ValidateBodyPipe` (`src/common/pipes/validate-body.pipe.ts`), qui prend la classe DTO explicitement et n'a donc besoin d'aucune métadonnée réfléchie. Appliqué sur `login`/`refresh` ; **convention à répéter sur tout futur endpoint validé par DTO**.
+3. **`new Date()` sur une colonne `temporal.updatedAt()`/`DateTime` → `RUNTIME.ENCODE_FAILED` à l'exécution.** Le codec `pg/timestamptz-temporal@1` attend un `Temporal.Instant`, pas un `Date` natif JS. Corrigé dans `AuthService.login` (mise à jour de `lastLoginAt`) avec `Temporal.Now.instant()` (`import { Temporal } from "temporal-polyfill"`). Le script de seed n'a pas ce problème : il omet volontairement `createdAt`/`updatedAt` des `create()` pour laisser les défauts DB s'appliquer.
+
+Ces trois pièges sont documentés dans `docs/ROADMAP.md` § *Gotcha toolchain* pour ne pas les redécouvrir à chaque nouveau module.
+
+**Validation de bout en bout** (serveur réel, base réelle, requêtes HTTP réelles — pas de mocks) :
+
+| Test | Résultat |
+|---|---|
+| `GET /` (public, hors préfixe) | 200 |
+| `GET /api/users` sans token | 401 |
+| `GET /api/users` avec token invalide | 401 |
+| `POST /api/auth/login` mauvais mot de passe | 401, message FR |
+| `POST /api/auth/login` sans `password` | 400, erreurs `class-validator` |
+| `POST /api/auth/login` email invalide | 400 |
+| `POST /api/auth/login` champ non attendu (`forbidNonWhitelisted`) | 400 |
+| `POST /api/auth/login` identifiants corrects | 200, `{ accessToken, refreshToken, user }` |
+| `GET /api/auth/me` avec token | 200, payload JWT |
+| `GET /api/users` avec token (SUPER_ADMIN a `USERS:READ`) | 200, liste (sans `passwordHash`) |
+| `POST /api/auth/refresh` avec refresh token valide | 200, nouvelle paire de tokens |
+| `POST /api/auth/refresh` avec token invalide | 401 |
+
+**État** : Phase 0 de la roadmap terminée et testée en conditions réelles. Prochaine étape : Phase 1 (catalogue, stock, vente/caisse).
+
 ## 2026-08-31 — Remise en état du backend et validation "fonctionnel de bout en bout"
 
 **Contexte** : reprise du projet généré par `create-prisma`, contrat de données déjà très avancé (41 modèles) mais code applicatif minimal et cassé après une réorganisation des migrations.

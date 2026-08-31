@@ -18,6 +18,7 @@
     "migration:plan": "prisma migration plan",
     "migration:show": "prisma migration show",
     "migration:status": "prisma migration status",
+    "seed": "tsx src/prisma/seed.ts",
     "skills:sync": "prisma skills sync || exit 0",
     "start": "node dist/server.mjs",
     "postinstall": "prisma skills sync || exit 0"
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.2",
+    "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
     "esbuild": "^0.28.1",
     "jest": "^30.5.0",

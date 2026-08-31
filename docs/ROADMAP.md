@@ -10,12 +10,23 @@ Le contrat de données (`contract.prisma`) est déjà quasi complet (41 modèles
 
 ## Phase 0 — Fondations (bloquant pour tout le reste)
 
-- [ ] **Module d'authentification** (`AuthModule`) : login (email/téléphone + mot de passe via `bcryptjs`), génération access/refresh JWT (`@nestjs/jwt` déjà en dépendance), `JwtStrategy` Passport, guard global + décorateur `@Public()` pour les routes ouvertes.
-- [ ] **Guard RBAC** basé sur `Role`/`Permission`/`RolePermission` déjà modélisés — décorateur `@RequirePermission(resource, action)`.
-- [ ] **Script de seed** (`src/prisma/seed.ts` a été supprimé, à réécrire) : créer l'organisation par défaut, un store, les rôles système (`SUPER_ADMIN`, `CASHIER`, …), les permissions, et le compte admin initial à partir de `SEED_ADMIN_PHONE`/`SEED_ADMIN_PASSWORD`.
-- [ ] **Validation globale** : activer `class-validator`/`class-transformer` (déjà en dépendance) via un `ValidationPipe` global + DTOs par endpoint.
-- [ ] **Gestion d'erreurs uniforme** : filtre d'exception global NestJS, format de réponse d'erreur cohérent pour le client Electron.
-- [ ] **CORS** : autoriser l'origine de l'app Electron en dev (`app://` ou `http://localhost:<port-vite>` selon la config Forge).
+- [x] **Module d'authentification** (`AuthModule`) — login email + mot de passe (`bcryptjs`), access/refresh JWT (`@nestjs/jwt`), `JwtAccessStrategy` Passport, `JwtAuthGuard` global + décorateur `@Public()`. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md).
+- [x] **Guard RBAC** — `PermissionsGuard` + décorateur `@RequirePermission(resource, action)`, résolu en base via `Role`→`RolePermission`→`Permission` à chaque requête (pas embarqué dans le JWT, pour qu'une révocation soit immédiate).
+- [x] **Script de seed** (`src/prisma/seed.ts`) — organisation/magasin par défaut, 99 permissions, 11 rôles système, 402 habilitations rôle→permission, compte admin initial. `npm run seed`.
+- [x] **Validation** — DTOs `class-validator` + `ValidateBodyPipe` (voir gotcha esbuild ci-dessous ; ⚠️ ne pas utiliser `@Body() dto: X` seul).
+- [ ] **Gestion d'erreurs uniforme** : filtre d'exception global NestJS (le format actuel est celui par défaut de Nest — correct mais pas encore personnalisé).
+- [x] **CORS** activé (`origin: true` en dev — à restreindre en prod).
+- [x] **Préfixe API** (`/api`) appliqué, `/` conservé en health-check public hors préfixe.
+
+### ⚠️ Gotcha toolchain à connaître avant tout nouveau module
+
+Ce projet transpile avec **esbuild** (tsx en dev, esbuild pour `npm run build`), qui **n'émet pas `design:paramtypes`** (`emitDecoratorMetadata`). Conséquences, déjà rencontrées et corrigées dans `AuthModule` :
+
+1. **Injection de dépendances par type seul ne fonctionne pas.** `constructor(private readonly x: SomeService)` reçoit `undefined` à l'exécution. Le scaffold `create-prisma` avait déjà contourné ça avec `@Inject(Token)` explicite (voir `users.service.ts`) — **toujours répéter le token explicitement** : `constructor(@Inject(SomeService) private readonly x: SomeService)`.
+2. **`@Body() dto: SomeDto` seul ne valide RIEN.** Le `ValidationPipe` global déduit le DTO via le type réfléchi du paramètre ; sans métadonnée, il retombe sur `Object` et **saute la validation silencieusement** (pas d'erreur, le payload passe tel quel — a fait planter `AuthService.login` en 500 au lieu de renvoyer un 400 propre). Utiliser systématiquement `@Body(new ValidateBodyPipe(SomeDto)) dto: SomeDto` (`src/common/pipes/validate-body.pipe.ts`).
+3. **Les colonnes `DateTime`/`temporal.updatedAt()` attendent un `Temporal.Instant`, pas un `Date` natif.** `new Date()` compile mais échoue à l'exécution (`RUNTIME.ENCODE_FAILED`). Utiliser `Temporal.Now.instant()` (`import { Temporal } from "temporal-polyfill"`), ou omettre le champ pour laisser le défaut DB s'appliquer (approche du seed).
+
+Ces trois pièges sont invisibles à la compilation (`tsc --noEmit` passe), ils ne se révèlent qu'à l'exécution — les garder en tête pour chaque nouveau module de la Phase 1.
 
 ## Phase 1 — Modules métier cœur (MVP point de vente)
 
@@ -48,15 +59,19 @@ Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur 
 
 Points de contrat à stabiliser tôt pour ne pas bloquer le développement du client :
 
-- [ ] **Contrat d'API** : préfixe déjà prévu via `API_PREFIX=api` dans `.env` mais pas encore appliqué dans `main.ts` (`app.setGlobalPrefix(...)`) — à activer avant que le client commence à coder des appels HTTP en dur.
+- [x] **Contrat d'API** : préfixe `/api` actif (`API_PREFIX` dans `.env`). Routes actuelles : `POST /api/auth/login`, `POST /api/auth/refresh`, `GET /api/auth/me`, `GET /api/users`, `GET /` (health-check public, hors préfixe).
 - [ ] **Format des réponses & pagination** standard (ex. `{ data, meta }`) pour que le client React puisse construire des hooks génériques.
-- [ ] **Authentification côté client** : flux de login + stockage sécurisé du token dans le process principal Electron (`safeStorage`), refresh transparent.
+- [ ] **Authentification côté client** : flux de login + stockage sécurisé du token dans le process principal Electron (`safeStorage`), refresh transparent. Le backend renvoie déjà `{ accessToken, refreshToken, user }` sur `/api/auth/login`.
 - [ ] **Mode offline/dégradé** : les IDs `Uuid` générés dès la création (pas d'auto-incrément) permettent en théorie une création côté client avant confirmation serveur — à confirmer si un mode caisse hors-ligne est requis.
 - [ ] **OpenAPI/Swagger** (`@nestjs/swagger`, pas encore installé) — générer une doc d'API consommable pour accélérer le développement du client, éventuellement génération de types TypeScript partagés.
 
+## Décisions déjà tranchées
+
+- **Identifiant de connexion : email** (seul champ requis+unique du modèle `User` ; `phone` reste optionnel). Login par téléphone ajoutable plus tard sans changement de schéma si besoin.
+- **Permissions résolues en base à chaque requête**, pas embarquées dans le JWT — cohérence immédiate si un rôle est modifié, au prix d'une requête DB par route protégée par `@RequirePermission`.
+
 ## Décisions en attente (à trancher avec l'utilisateur)
 
-- Authentification : téléphone ou email comme identifiant principal ? (le contrat autorise les deux, uniques et optionnels sauf email)
 - Multi-organisation dès le départ ou un seul tenant pour la V1 ?
 - Mode de déploiement cible (Prisma Cloud/Composer vs VPS classique) ?
 - Politique de suppression du champ `passwordHash` dans les réponses : centraliser via un `select` systématique ou un intercepteur de sérialisation ?
