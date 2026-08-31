@@ -35,13 +35,17 @@ Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur 
 1. **Organizations / Stores** — CRUD minimal (souvent un seul tenant au départ). *Pas encore fait — l'org/store par défaut du seed suffit pour l'instant.*
 2. **Users / Roles** — gestion des comptes employés depuis l'app desktop (un admin crée les caissiers). *Pas encore fait.*
 3. [x] **Catalogue** — `Category`, `Brand`, `Product` : CRUD complet + `GET /products?search=` + `GET /products/code/:code` (lookup SKU/code-barres pour la caisse). Testé de bout en bout le 2026-08-31 (voir PROGRESS.md). `ProductBarcode` (codes-barres multiples) et `ProductPrice` (prix par magasin) **restent à faire** — le lookup actuel ne couvre que le SKU exact, pas encore une table de codes-barres dédiée.
-4. **Stock** — `Stock` (quantité par magasin/produit), `StockMovement` en écriture append-only à chaque mouvement.
-5. **Vente / Caisse** — `CashRegister`, `CashierSession` (ouverture/fermeture de caisse), `Sale`/`SaleItem`, `Payment` (au moins `CASH` pour commencer). C'est le flux transactionnel critique : à envelopper dans `db.transaction(...)` (débit stock + création vente + mouvement de caisse atomiques).
+4. [x] **Stock** — `Stock` (quantité par magasin/produit) + `StockMovement` (ledger append-only). `POST /api/stock/movements` est le seul point d'entrée censé faire varier une quantité (transaction DB atomique : lecture du stock courant, calcul, upsert `Stock`, insertion `StockMovement`). Garde-fous testés : stock insuffisant refusé (400), quantité négative refusée pour les types à sens fixe, `INVENTORY_CORRECTION` accepte un delta signé. `StockService` exporté par `StockModule` pour être appelé directement par les futurs modules Vente/Achat plutôt que de dupliquer la logique. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md).
+5. **Vente / Caisse** — `CashRegister`, `CashierSession` (ouverture/fermeture de caisse), `Sale`/`SaleItem`, `Payment` (au moins `CASH` pour commencer). C'est le flux transactionnel critique : à envelopper dans `db.transaction(...)` (débit stock + création vente + mouvement de caisse atomiques) — **appeler `StockService.recordMovement(...)` (type `SALE`) plutôt que de toucher `Stock` directement.**
 6. **Reçus** — génération `Receipt` a minima en base ; l'impression/PDF peut venir plus tard.
 
 ### Note d'implémentation — champs `Numeric`/`Decimal`
 
-Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Exemple dans `products.service.ts`. À répéter pour `Stock`, `Sale`, `Payment`, etc.
+Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Utilisé dans `products.service.ts` et `stock.service.ts`.
+
+### ⚠️ Piège infra rencontré — port PostgreSQL
+
+Un PostgreSQL natif (service Windows, partagé avec d'autres projets) écoutait déjà sur le port `5432` standard. `docker-compose.yml` publiait aussi sur `5432` : le conteneur du projet démarrait "healthy" mais **l'app parlait en réalité à l'instance native** (aucune erreur — les deux bases acceptaient les mêmes identifiants). Corrigé en republiant le conteneur sur `5433` (`docker-compose.yml` + `DATABASE_URL`). Symptôme qui aurait dû alerter plus tôt : des tables `user`/`post` (étrangères au contrat) visibles en interrogeant la base — signe qu'elle est partagée avec un autre projet.
 
 ## Phase 2 — Modules étendus
 

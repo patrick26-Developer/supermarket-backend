@@ -118,8 +118,10 @@ Le graphe de migrations vit sous `migrations/app/`. La ref `migrations/app/refs/
 | `SEED_ADMIN_PHONE` / `SEED_ADMIN_PASSWORD` | Prévus pour un script de seed de l'admin initial (à écrire, voir roadmap) |
 
 `docker-compose.yml` démarre :
-- `postgres` (port 5432, DB `superette_db`)
+- `postgres` (**port hôte 5433** → 5432 dans le conteneur, DB `superette_db`) — le port 5433 est délibéré : évite un conflit si un PostgreSQL natif tourne déjà sur le 5432 standard (cas rencontré en dev, voir `docs/PROGRESS.md`)
 - `pgadmin` (port 5050, http://localhost:5050)
+
+> ⚠️ Avant de lancer `docker compose up -d`, vérifier qu'aucun autre service PostgreSQL n'écoute déjà sur le port choisi : `Get-NetTCPConnection -LocalPort 5433 -State Listen` (PowerShell). Si `DATABASE_URL` pointe silencieusement vers une autre instance Postgres que le conteneur du projet, l'app fonctionne quand même (aucune erreur) mais les données n'atterrissent pas là où on le croit — symptôme difficile à repérer sans y penser explicitement.
 
 ## 8. Décisions d'architecture notables
 

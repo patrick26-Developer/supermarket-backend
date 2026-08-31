@@ -8,6 +8,7 @@ import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./auth/guards/permissions.guard";
 import { CatalogModule } from "./catalog/catalog.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { StockModule } from "./stock/stock.module";
 
 import { UsersController } from "./users.controller";
 import { UsersService } from "./users.service";
@@ -18,6 +19,7 @@ import { UsersService } from "./users.service";
     PrismaModule,
     AuthModule,
     CatalogModule,
+    StockModule,
   ],
   controllers: [
     AppController,

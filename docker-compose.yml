@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +8,10 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: patrick123
     ports:
-      - "5432:5432"
+      # 5433 (pas 5432) : évite le conflit avec un service PostgreSQL natif
+      # qui pourrait déjà écouter sur le port standard côté hôte (c'était le
+      # cas en dev — voir docs/PROGRESS.md, entrée "bascule vers Docker").
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

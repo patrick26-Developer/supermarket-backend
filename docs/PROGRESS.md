@@ -2,6 +2,38 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-08-31 (suite 3) — Module Stock (Phase 1.4) + bascule vers PostgreSQL Docker
+
+### Découverte : l'app ne parlait pas au conteneur Docker
+
+En cherchant un `storeId` réel pour tester le module Stock, `docker exec superette-postgres psql ... "SELECT * FROM pg_tables WHERE schemaname='public'"` a renvoyé **0 table** — alors que l'API fonctionnait et renvoyait de vraies données. Investigation : un service Windows **PostgreSQL 17 natif** (`postgresql-x64-17`), déjà en écoute sur le port `5432` avant même que Docker s'y branche, interceptait toutes les connexions de l'app (`DATABASE_URL` pointait sur `localhost:5432`). Le conteneur Docker (Postgres 16 Alpine) tournait "healthy" mais **n'a jamais reçu une seule requête** de ce projet — toutes les données du jour (catégories, marques, produits) vivaient en fait dans l'instance native, une instance **partagée avec d'autres projets locaux** (confirmé par la présence de tables `user`/`post`, étrangères à notre contrat).
+
+**Décision (validée avec l'utilisateur)** : basculer proprement vers le conteneur Docker plutôt que de continuer sur l'instance partagée, sans toucher au service Windows natif (pour ne pas risquer de casser d'autres projets qui en dépendent peut-être). Solution retenue : republier le conteneur sur le port **5433** au lieu de 5432 (`docker-compose.yml` + `DATABASE_URL` dans `.env`/`.env.example`), ce qui élimine le conflit sans dépendre de l'état du service natif.
+
+**Actions** : `docker compose down && docker compose up -d` (recréation avec le nouveau port), connexion directe vérifiée avec `pg` (Node) pour confirmer qu'on parle bien à Postgres 16 (Docker) et non 17 (natif), `npx prisma db init` (schéma appliqué dans le conteneur, vide au départ), `npm run seed` (99 permissions / 11 rôles / 402 habilitations / admin), `npx prisma db verify` → `ok: true`. Serveur redémarré et retesté de bout en bout contre la bonne base — tout fonctionne à l'identique.
+
+### Module Stock (`src/stock/`)
+
+**Livré** : `Stock` (quantité par magasin/produit) + `StockMovement` (ledger append-only). `POST /api/stock/movements` est le seul point d'écriture, dans une **transaction DB** (`db.transaction`) : lit le stock courant, calcule la nouvelle quantité selon le sens du type de mouvement (`STOCK_MOVEMENT_DIRECTION` — 8 types à sens fixe + `INVENTORY_CORRECTION` à delta signé), refuse si le résultat serait négatif, upsert `Stock`, insère `StockMovement`. `StockService` est exporté par `StockModule` pour que les futurs modules Vente/Achat l'appellent directement plutôt que de dupliquer la logique de variation de stock.
+
+Endpoints : `GET /api/stock` (filtrable `storeId`/`productId`), `GET /api/stock/:storeId/:productId`, `GET /api/stock/movements` (historique), `POST /api/stock/movements`.
+
+**Testé de bout en bout** (contre le vrai conteneur Docker) :
+
+| Scénario | Résultat |
+|---|---|
+| Réception fournisseur `PURCHASE_RECEIPT` +100 sur stock vide | `previousQty: 0 → resultingQty: 100` |
+| Vente `SALE` -30 | `100 → 70` |
+| Vente de 1000 (stock insuffisant) | 400, message explicite |
+| `SALE` avec quantité négative (-5) | 400, "la quantité doit être strictement positive" |
+| `INVENTORY_CORRECTION` avec delta signé -10 | `70 → 60`, accepté |
+| `GET /stock/movements?productId=` | historique complet, plus récent en premier |
+| `GET /stock/:storeId/:productId` | `quantity: 60`, `availableQty: 60` cohérents |
+
+### Autre
+
+Outillage de test livré à l'utilisateur : commandes PowerShell (`Invoke-RestMethod`) prêtes à copier-coller pour tester l'API sans Postman, en plus de la collection Postman existante. Confirmation que l'utilisateur teste aussi avec son propre outil local "DevDesk" (API Tester) — fonctionne normalement avec l'API (401 attendu sans header `Authorization`, comportement correct).
+
 ## 2026-08-31 (suite 2) — Module Catalogue (Phase 1.3 roadmap)
 
 **Livré** : CRUD complet pour `Category`, `Brand`, `Product` (`src/catalog/`), protégé par `@RequirePermission` (déjà seedé pour tous les rôles). `GET /api/products?search=` (recherche par nom) et `GET /api/products/code/:code` (lookup code-barres → SKU, pensé pour la caisse) ajoutés. Contrôles d'unicité (slug/sku/nom) et de cohérence des FK (`categoryId`/`brandId` doivent exister) avant écriture.
