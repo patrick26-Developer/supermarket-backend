@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { randomUUID } from "node:crypto";
 
 import { numeric } from "../common/numeric";
+import type { DbLike } from "../common/db-like";
 import { PrismaService } from "../prisma.service";
 import type { RecordMovementDto } from "./dto/record-movement.dto";
 import { STOCK_MOVEMENT_DIRECTION } from "./types/stock-enums";
@@ -36,15 +37,15 @@ export class StockService {
 
   /**
    * Enregistre un mouvement de stock et met à jour la fiche `Stock`
-   * correspondante de façon atomique (transaction DB). C'est le SEUL point
-   * d'entrée censé faire varier une quantité de stock — les futurs modules
-   * Vente/Achat doivent appeler cette méthode plutôt que d'écrire
-   * directement dans `Stock`.
+   * correspondante de façon atomique. C'est le SEUL point d'entrée censé
+   * faire varier une quantité de stock.
+   *
+   * `client` optionnel : passer le `tx` d'un appelant (ex. SalesService)
+   * pour que ce mouvement participe à SA transaction plutôt que d'en ouvrir
+   * une nouvelle — indispensable pour l'atomicité vente + stock. Sans
+   * `client`, ouvre sa propre transaction (cas de l'endpoint HTTP direct).
    */
-  async recordMovement(dto: RecordMovementDto) {
-    await this.assertStoreExists(dto.storeId);
-    await this.assertProductExists(dto.productId);
-
+  async recordMovement(dto: RecordMovementDto, client?: DbLike) {
     const direction = STOCK_MOVEMENT_DIRECTION[dto.type];
     if (direction === "signed") {
       if (dto.quantity === 0) {
@@ -57,8 +58,13 @@ export class StockService {
     }
     const delta = direction === "signed" ? dto.quantity : dto.quantity * direction;
 
-    return this.prisma.db.transaction(async (tx) => {
-      const existingStock = await tx.orm.public.Stock.where({ storeId: dto.storeId })
+    const run = async (db: DbLike) => {
+      const store = await db.orm.public.Store.where({ id: dto.storeId }).first();
+      if (!store) throw new NotFoundException("Magasin introuvable");
+      const product = await db.orm.public.Product.where({ id: dto.productId }).first();
+      if (!product) throw new NotFoundException("Produit introuvable");
+
+      const existingStock = await db.orm.public.Stock.where({ storeId: dto.storeId })
         .where({ productId: dto.productId })
         .first();
 
@@ -71,12 +77,12 @@ export class StockService {
       }
 
       if (existingStock) {
-        await tx.orm.public.Stock.where({ id: existingStock.id }).update({
+        await db.orm.public.Stock.where({ id: existingStock.id }).update({
           quantity: numeric<14, 3>(resultingQty),
           availableQty: numeric<14, 3>(resultingQty - Number(existingStock.reservedQty)),
         });
       } else {
-        await tx.orm.public.Stock.create({
+        await db.orm.public.Stock.create({
           id: randomUUID(),
           storeId: dto.storeId,
           productId: dto.productId,
@@ -86,7 +92,7 @@ export class StockService {
         });
       }
 
-      const movement = await tx.orm.public.StockMovement.create({
+      const movement = await db.orm.public.StockMovement.create({
         id: randomUUID(),
         storeId: dto.storeId,
         productId: dto.productId,
@@ -101,16 +107,9 @@ export class StockService {
       });
 
       return { movement, stock: { storeId: dto.storeId, productId: dto.productId, quantity: resultingQty } };
-    });
-  }
+    };
 
-  private async assertStoreExists(storeId: string): Promise<void> {
-    const store = await this.prisma.db.orm.public.Store.where({ id: storeId }).first();
-    if (!store) throw new NotFoundException("Magasin introuvable");
-  }
-
-  private async assertProductExists(productId: string): Promise<void> {
-    const product = await this.prisma.db.orm.public.Product.where({ id: productId }).first();
-    if (!product) throw new NotFoundException("Produit introuvable");
+    if (client) return run(client);
+    return this.prisma.db.transaction((tx) => run(tx));
   }
 }

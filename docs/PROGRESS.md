@@ -2,6 +2,33 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-08-31 (suite 4) — Module Vente/Caisse (Phase 1.5)
+
+**Livré** : `src/cash/` (`CashRegister` CRUD léger, `CashierSession` ouvrir/fermer/mouvements manuels) et `src/sales/` (`POST /api/sales`, le cœur transactionnel du POS).
+
+Refactor préalable : `StockService.recordMovement()` accepte désormais un `tx` optionnel (`src/common/db-like.ts`, type `DbLike` — sous-ensemble structurel `{ orm }` commun à `db` et à tout `tx` de transaction) pour pouvoir s'exécuter DANS la transaction d'un appelant plutôt que d'en ouvrir une nouvelle. C'est ce qui permet à `SalesService.create()` de garantir que la vente entière (commande + lignes + décrément de stock + paiements + mouvement de caisse) est atomique — tout échoue ensemble ou rien.
+
+`POST /api/sales` en une seule transaction DB : `Order` + `OrderItem[]` (calcul ligne par ligne : sous-total, remise, TVA depuis `Product.taxRate`) → `Sale` + `SaleItem[]` → décrément de stock par ligne via `StockService.recordMovement(..., tx)` → `Payment[]` (un ou plusieurs modes) → `CashMovement` type `CASH_SALE` si paiement cash. Vérifie en amont que la session de caisse est `OPEN` et que la somme des paiements correspond au total (tolérance 1 centime).
+
+`POST /api/cash-sessions/:id/close` recalcule les totaux de façon **autoritative depuis le ledger** (`CashMovement` + `Sale` de la session), pas depuis un compteur incrémental — évite toute dérive silencieuse.
+
+**Testé de bout en bout** (contre le conteneur Docker, scénario complet) :
+
+| Étape | Résultat |
+|---|---|
+| Créer une caisse | OK |
+| Ouvrir une session (fond de caisse 5000) | `expectedAmount: 5000.00` |
+| Ouvrir une 2ᵉ session sur la même caisse | 409 Conflict |
+| Vente 5×Riz à 4000 (paiement CASH 20000) | vente créée, stock 60→55 |
+| `GET /sales/:id` | items + payments correctement imbriqués (`.include()`) |
+| Vente avec paiement ≠ total (100 au lieu de 4000) | 400, message explicite |
+| Vente avec quantité (9999) dépassant le stock disponible (53) | 400 — **et le stock n'a pas bougé** (rollback transactionnel complet vérifié, y compris l'Order/Sale déjà construits en mémoire avant l'échec) |
+| Mouvement manuel `EXPENSE` -1000 | OK |
+| Clôture session, montant compté 32000 | `expectedCash: 32000.00`, `actualCash: 32000.00`, `difference: 0.00` — calcul vérifié à la main : 5000 (ouverture) + 20000 + 8000 (2 ventes cash) − 1000 (dépense) = 32000 ✓ |
+| Vente tentée sur une session fermée | 400 |
+
+**Limites connues (documentées dans ROADMAP.md)** : pas de prix par magasin (unitPrice fourni par le client), pas d'annulation/remboursement, remise en montant absolu uniquement.
+
 ## 2026-08-31 (suite 3) — Module Stock (Phase 1.4) + bascule vers PostgreSQL Docker
 
 ### Découverte : l'app ne parlait pas au conteneur Docker

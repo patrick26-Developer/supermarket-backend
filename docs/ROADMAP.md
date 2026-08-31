@@ -36,12 +36,23 @@ Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur 
 2. **Users / Roles** — gestion des comptes employés depuis l'app desktop (un admin crée les caissiers). *Pas encore fait.*
 3. [x] **Catalogue** — `Category`, `Brand`, `Product` : CRUD complet + `GET /products?search=` + `GET /products/code/:code` (lookup SKU/code-barres pour la caisse). Testé de bout en bout le 2026-08-31 (voir PROGRESS.md). `ProductBarcode` (codes-barres multiples) et `ProductPrice` (prix par magasin) **restent à faire** — le lookup actuel ne couvre que le SKU exact, pas encore une table de codes-barres dédiée.
 4. [x] **Stock** — `Stock` (quantité par magasin/produit) + `StockMovement` (ledger append-only). `POST /api/stock/movements` est le seul point d'entrée censé faire varier une quantité (transaction DB atomique : lecture du stock courant, calcul, upsert `Stock`, insertion `StockMovement`). Garde-fous testés : stock insuffisant refusé (400), quantité négative refusée pour les types à sens fixe, `INVENTORY_CORRECTION` accepte un delta signé. `StockService` exporté par `StockModule` pour être appelé directement par les futurs modules Vente/Achat plutôt que de dupliquer la logique. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md).
-5. **Vente / Caisse** — `CashRegister`, `CashierSession` (ouverture/fermeture de caisse), `Sale`/`SaleItem`, `Payment` (au moins `CASH` pour commencer). C'est le flux transactionnel critique : à envelopper dans `db.transaction(...)` (débit stock + création vente + mouvement de caisse atomiques) — **appeler `StockService.recordMovement(...)` (type `SALE`) plutôt que de toucher `Stock` directement.**
-6. **Reçus** — génération `Receipt` a minima en base ; l'impression/PDF peut venir plus tard.
+5. [x] **Vente / Caisse** — `CashRegister` (CRUD léger) + `CashierSession` (ouvrir/clôturer, une seule session `OPEN` par caisse à la fois) + `CashMovement` (ledger, mouvements manuels + `CASH_SALE` automatique) + `Sale`/`SaleItem`/`Order`/`OrderItem`/`Payment`. `POST /api/sales` est LE flux transactionnel critique : une seule transaction DB crée `Order` + `OrderItem[]` + `Sale` + `SaleItem[]` + décrémente le stock via `StockService.recordMovement(..., tx)` + crée `Payment[]` + `CashMovement` (`CASH_SALE`) si paiement cash — tout ou rien. `POST /api/cash-sessions/:id/close` recalcule les totaux (ventes, encaissements, sorties) depuis le ledger `CashMovement`/`Sale` plutôt que depuis un compteur incrémental, pour éviter toute dérive. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md), y compris le rollback complet sur stock insuffisant en cours de vente.
+6. **Reçus** — génération `Receipt` a minima en base ; l'impression/PDF peut venir plus tard. *Pas encore fait.*
+
+### Limites connues du module Vente (V1)
+
+- **Pas de prix par magasin** (`ProductPrice` pas encore branché) : le caissier/le client fournit `unitPrice` explicitement à chaque ligne de vente. À corriger dès que le catalogue expose les prix par magasin.
+- **Un seul type de remise** : `discountAmount` par ligne, en montant absolu — pas de remise en pourcentage ni de remise globale sur la vente.
+- **Pas d'annulation/remboursement** : `Sale.status`, `PaymentStatus.REFUNDED`, `CashMovementType.CASH_REFUND` existent dans le contrat mais aucun endpoint ne les pilote encore.
+- **Référence générée côté app** (`generateReference()`, `src/common/reference.ts`), pas garantie unique sous forte concurrence (repose sur la contrainte `@unique` en base en dernier recours) — largement suffisant à l'échelle d'une caisse, à revisiter si univers multi-caisses à très fort débit.
 
 ### Note d'implémentation — champs `Numeric`/`Decimal`
 
-Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Utilisé dans `products.service.ts` et `stock.service.ts`.
+Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Utilisé dans `products.service.ts`, `stock.service.ts`, `cash-sessions.service.ts`, `sales.service.ts`.
+
+### Note d'implémentation — composer des transactions entre services
+
+`StockService.recordMovement(dto, tx?)` accepte un `tx` optionnel (`src/common/db-like.ts`, type `DbLike`) : sans lui, il ouvre sa propre transaction (usage direct via l'endpoint HTTP) ; avec lui, il participe à la transaction de l'appelant (c'est ainsi que `SalesService.create()` garantit que vente + décrément de stock sont atomiques). **Reproduire ce pattern** pour tout futur service qui doit composer ses écritures avec celles d'un autre (achats → réception qui alimente le stock, etc.) plutôt que d'ouvrir des transactions imbriquées ou dupliquer la logique.
 
 ### ⚠️ Piège infra rencontré — port PostgreSQL
 

@@ -207,6 +207,88 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Stock",
+      "item": [
+        { "name": "List (filtrable ?storeId=&productId=)", "request": { "method": "GET", "url": "{{baseUrl}}/api/stock" } },
+        { "name": "Get one", "request": { "method": "GET", "url": "{{baseUrl}}/api/stock/{{storeId}}/{{productId}}" } },
+        { "name": "Movements history", "request": { "method": "GET", "url": "{{baseUrl}}/api/stock/movements?productId={{productId}}" } },
+        {
+          "name": "Record movement (PURCHASE_RECEIPT)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/stock/movements",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"productId\": \"{{productId}}\",\n  \"type\": \"PURCHASE_RECEIPT\",\n  \"quantity\": 50,\n  \"unitCost\": 1000\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cash",
+      "item": [
+        {
+          "name": "Create register",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { pm.collectionVariables.set('cashRegisterId', pm.response.json().id); }"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cash-registers",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"code\": \"CAISSE-1\",\n  \"name\": \"Caisse principale\"\n}" }
+          }
+        },
+        { "name": "List registers", "request": { "method": "GET", "url": "{{baseUrl}}/api/cash-registers" } },
+        {
+          "name": "Open session",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { pm.collectionVariables.set('sessionId', pm.response.json().id); }"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cash-sessions/open",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"cashRegisterId\": \"{{cashRegisterId}}\",\n  \"openingAmount\": 5000\n}" }
+          }
+        },
+        { "name": "Get session", "request": { "method": "GET", "url": "{{baseUrl}}/api/cash-sessions/{{sessionId}}" } },
+        {
+          "name": "Record manual movement (EXPENSE)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cash-sessions/{{sessionId}}/movements",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"EXPENSE\",\n  \"amount\": 1000,\n  \"reason\": \"Achat fournitures\"\n}" }
+          }
+        },
+        {
+          "name": "Close session",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cash-sessions/{{sessionId}}/close",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actualAmount\": 32000,\n  \"notes\": \"RAS\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "item": [
+        { "name": "List (?storeId=&sessionId=)", "request": { "method": "GET", "url": "{{baseUrl}}/api/sales" } },
+        { "name": "Get one (avec items + payments)", "request": { "method": "GET", "url": "{{baseUrl}}/api/sales/{{saleId}}" } },
+        {
+          "name": "Create sale (1 article, paiement CASH)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { pm.collectionVariables.set('saleId', pm.response.json().id); }"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/sales",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 2, \"unitPrice\": 4000 }\n  ],\n  \"payments\": [\n    { \"method\": \"CASH\", \"amount\": 8000 }\n  ]\n}"
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -214,6 +296,10 @@
     { "key": "refreshToken", "value": "" },
     { "key": "categoryId", "value": "" },
     { "key": "brandId", "value": "" },
-    { "key": "productId", "value": "" }
+    { "key": "productId", "value": "" },
+    { "key": "storeId", "value": "", "description": "Id du magasin par défaut créé par npm run seed — à renseigner manuellement (voir pgAdmin ou GET /api/stock après une première requête)." },
+    { "key": "cashRegisterId", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "saleId", "value": "" }
   ]
 }
