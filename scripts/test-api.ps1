@@ -282,6 +282,18 @@ Invoke-ApiTest "POST /api/cash-registers — code dupliqué sur le même magasin
         -Body (@{ storeId = $storeId; code = "CAISSE-1"; name = "Doublon" } | ConvertTo-Json)
 }
 
+# Nettoyage : ferme toute session restée ouverte sur cette caisse (run précédent
+# interrompu) pour que le script reste rejouable sans intervention manuelle.
+$staleSessions = Invoke-ApiTest "GET /api/cash-sessions?status=OPEN — vérification avant ouverture" {
+    Invoke-RestMethod "$baseUrl/api/cash-sessions?status=OPEN" -Headers $headers
+}
+foreach ($stale in @($staleSessions) | Where-Object { $_ -and $_.cashRegisterId -eq $registerId }) {
+    Invoke-ApiTest "Nettoyage : fermeture d'une session restée ouverte ($($stale.id))" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/cash-sessions/$($stale.id)/close" -Headers $headers -ContentType "application/json" `
+            -Body (@{ actualAmount = [double]$stale.expectedAmount; notes = "Nettoyage auto avant test-api.ps1" } | ConvertTo-Json)
+    }
+}
+
 $session = Invoke-ApiTest "POST /api/cash-sessions/open — ouvrir une session (fond 5000) (201 attendu)" {
     Invoke-RestMethod -Method Post -Uri "$baseUrl/api/cash-sessions/open" -Headers $headers -ContentType "application/json" `
         -Body (@{ cashRegisterId = $registerId; openingAmount = 5000 } | ConvertTo-Json)
@@ -324,6 +336,33 @@ if ($session) {
             sessionId = $session.id
             items    = @(@{ productId = $rizId; quantity = 1; unitPrice = 4000 })
             payments = @(@{ method = "CASH"; amount = 100 })
+        } | ConvertTo-Json -Depth 5)
+    }
+
+    Invoke-ApiTest "POST /api/sales — paiement MTN_MOMO simulé, succès (201 attendu, providerRef FAKE-...)" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/sales" -Headers $headers -ContentType "application/json" -Body (@{
+            storeId  = $storeId
+            sessionId = $session.id
+            items    = @(@{ productId = $rizId; quantity = 1; unitPrice = 4000 })
+            payments = @(@{ method = "MTN_MOMO"; amount = 4000; transactionRef = "MTN-CLIENT-REF-001" })
+        } | ConvertTo-Json -Depth 5)
+    }
+
+    Invoke-ApiTest "POST /api/sales — paiement AIRTEL_MONEY forceFailure (422 attendu, zéro trace en base)" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/sales" -Headers $headers -ContentType "application/json" -Body (@{
+            storeId  = $storeId
+            sessionId = $session.id
+            items    = @(@{ productId = $rizId; quantity = 1; unitPrice = 4000 })
+            payments = @(@{ method = "AIRTEL_MONEY"; amount = 4000; forceFailure = $true })
+        } | ConvertTo-Json -Depth 5)
+    }
+
+    Invoke-ApiTest "POST /api/sales — méthode de paiement inconnue (400 attendu, message clair)" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/sales" -Headers $headers -ContentType "application/json" -Body (@{
+            storeId  = $storeId
+            sessionId = $session.id
+            items    = @(@{ productId = $rizId; quantity = 1; unitPrice = 4000 })
+            payments = @(@{ method = "BITCOIN"; amount = 4000 })
         } | ConvertTo-Json -Depth 5)
     }
 }
@@ -430,9 +469,16 @@ if ($newUser) {
         }
     }
 
+    # Téléphone unique à chaque exécution, même raison que $testEmail plus haut.
+    $testPhone = "+2420" + (Get-Date -Format "HHmmssff")
     Invoke-ApiTest "PUT /api/users/:id — mise à jour du téléphone" {
         Invoke-RestMethod -Method Put -Uri "$baseUrl/api/users/$($newUser.id)" -Headers $headers -ContentType "application/json" `
-            -Body (@{ phone = "+242069999999" } | ConvertTo-Json)
+            -Body (@{ phone = $testPhone } | ConvertTo-Json)
+    }
+
+    Invoke-ApiTest "PUT /api/users/:id — téléphone déjà utilisé par un autre compte (409 attendu)" {
+        Invoke-RestMethod -Method Put -Uri "$baseUrl/api/users/$($newUser.id)" -Headers $headers -ContentType "application/json" `
+            -Body (@{ phone = "+242060000000" } | ConvertTo-Json)  # téléphone de l'admin du seed
     }
 
     Invoke-ApiTest "POST /api/users/:id/roles — assigner STOCK_MANAGER en plus" {

@@ -2,6 +2,32 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-09-01 (suite) — Paiements mobile money simulés (providers)
+
+**Contexte** : pas encore d'identifiants MTN/Airtel Money. Décision prise avec l'utilisateur avant codage (voir échange) : ne pas construire l'infrastructure asynchrone complète (webhooks, vérification de signature) contre une API qu'on ne connaît pas encore — probablement à refaire une fois la vraie doc en main. À la place : un pattern adaptateur qui isole totalement la simulation, pour un remplacement à coût zéro ailleurs dans le code le jour venu.
+
+**Livré — `src/payments/`** : interface `PaymentProvider` (`initiate() → {status, providerRef, failureReason}`), `CashProvider` (confirmation immédiate, comportement CASH inchangé), `FakeMobileMoneyProvider` (couvre MTN_MOMO/AIRTEL_MONEY/CARD/BANK_TRANSFER/OTHER — confirme toujours sauf `forceFailure: true` explicite dans la requête), `PaymentProviderRegistry` (résolution par méthode, seul point à toucher pour brancher un vrai provider plus tard). `providerRef` toujours préfixé `FAKE-` pour ne jamais confondre avec une vraie transaction.
+
+**`SalesService.create()` modifié** : les paiements sont désormais initiés (`initiatePayments()`) **avant** l'ouverture de la transaction DB plutôt que d'être créés directement dedans — anticipe le jour où un vrai provider fera un appel réseau externe (qui ne doit jamais bloquer une transaction ouverte). Un paiement refusé fait échouer toute la vente (`422`) avant la moindre écriture — aucun état intermédiaire.
+
+**Trois bugs découverts en testant et corrigés** :
+1. `ValidateBodyPipe` ne remontait pas les messages de validation des DTOs imbriqués dans un tableau (`@ValidateNested({ each: true })`) — un `payments[].method` invalide renvoyait bien 400 mais avec `message: []` vide, `class-validator` rangeant ces erreurs dans `error.children` plutôt que `error.constraints`. Corrigé par un parcours récursif. Ce bug touchait potentiellement tous les DTOs à tableau imbriqué de l'app, pas seulement les ventes.
+2. `UsersService.update()` ne vérifiait pas l'unicité du téléphone avant d'écrire (contrairement à `create()`) — un doublon remontait en 500 brut (contrainte Postgres non interceptée) au lieu d'un 409 propre. Corrigé en généralisant `assertUnique()` pour accepter un `excludingId` (même pattern que Category/Brand/Product) et en l'appelant aussi dans `update()`.
+3. `scripts/test-api.ps1` sautait silencieusement toute la section Ventes/Reçus si une session de caisse restait ouverte d'un run précédent interrompu (le `POST .../open` échouait en 409, `$session` valait `$null`, et tout le bloc `if ($session) {...}` était ignoré sans message d'erreur visible). Le script nettoie désormais automatiquement toute session restée ouverte sur la caisse de test avant d'en ouvrir une nouvelle — rejouable sans intervention manuelle.
+
+**Testé de bout en bout** (contre le conteneur Docker) :
+
+| Scénario | Résultat |
+|---|---|
+| Vente CASH | strictement identique à avant (non-régression confirmée) |
+| Vente MTN_MOMO (succès simulé) | `Payment.status: CONFIRMED`, `providerRef: FAKE-...`, `transactionRef` client conservé |
+| Vente AIRTEL_MONEY avec `forceFailure: true` | 422, message clair, **zéro trace en base** (aucun `Payment`, aucune ligne d'`Order`/`Sale`, stock inchangé) — l'échec survient avant l'ouverture de la transaction |
+| Méthode de paiement inconnue (`"BITCOIN"`) | 400 avec message de validation clair (après le correctif) |
+| Item de vente invalide imbriqué (quantité négative) | 400 avec message de validation clair (après le correctif) |
+| `PUT /api/users/:id` avec un téléphone déjà pris | 409 propre (après le correctif, au lieu du 500 initial) |
+
+**Résultat final** : `scripts/test-api.ps1` — 65 tests, tous conformes, zéro 500 inattendu.
+
 ## 2026-09-01 — Module Utilisateurs/Rôles + Reçus (Phase 1.2 et 1.6) — MVP Phase 1 complet
 
 **Incident résolu en début de session** : après une pause/veille de la machine, `POST /api/auth/login` renvoyait 500. Diagnostic : le conteneur Docker Postgres redevenu "healthy" refusait en réalité les connexions réelles (forwarding de port Windows→WSL2 resté bancal après le redémarrage du conteneur) — `psql` depuis l'intérieur du conteneur fonctionnait, mais toute connexion externe (Node `pg`, l'app) échouait avec `Connection terminated unexpectedly`. Résolu par `docker compose down && up` (recrée le conteneur, force un forwarding propre) ; données vérifiées intactes ensuite (volume Docker persistant). Documenté dans `docs/ROADMAP.md` comme piège récurrent à surveiller.

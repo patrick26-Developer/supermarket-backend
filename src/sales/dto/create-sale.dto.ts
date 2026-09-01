@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -44,6 +45,14 @@ export class SalePaymentDto {
   @IsString()
   @MaxLength(120)
   transactionRef?: string;
+
+  /**
+   * Test uniquement : force un échec simulé pour ce paiement (providers
+   * mobile money non-CASH — voir src/payments/). Sans effet sur CASH.
+   */
+  @IsOptional()
+  @IsBoolean()
+  forceFailure?: boolean;
 }
 
 export class CreateSaleDto {

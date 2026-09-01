@@ -1,6 +1,21 @@
 import { BadRequestException, Injectable, type PipeTransform } from "@nestjs/common";
 import { plainToInstance, type ClassConstructor } from "class-transformer";
-import { validate } from "class-validator";
+import { validate, type ValidationError } from "class-validator";
+
+/**
+ * `validate()` ne rapporte les messages de contrainte que sur `error.constraints`
+ * du niveau où ils sont attachés — un DTO invalide *à l'intérieur* d'un tableau
+ * imbriqué (`@ValidateNested({ each: true })`, ex. `CreateSaleDto.payments`)
+ * remonte ses erreurs dans `error.children`, pas dans `error.constraints` du
+ * champ parent. Sans ce parcours récursif, ces erreurs existent (400 renvoyé)
+ * mais le message reste vide — piège classique de class-validator.
+ */
+function collectErrorMessages(errors: ValidationError[]): string[] {
+  return errors.flatMap((error) => [
+    ...Object.values(error.constraints ?? {}),
+    ...(error.children?.length ? collectErrorMessages(error.children) : []),
+  ]);
+}
 
 /**
  * `@Body(new ValidateBodyPipe(LoginDto)) dto: LoginDto` — validation DTO
@@ -30,8 +45,7 @@ export class ValidateBodyPipe<T extends object> implements PipeTransform<unknown
       forbidNonWhitelisted: true,
     });
     if (errors.length > 0) {
-      const messages = errors.flatMap((error) => Object.values(error.constraints ?? {}));
-      throw new BadRequestException(messages);
+      throw new BadRequestException(collectErrorMessages(errors));
     }
     return instance;
   }

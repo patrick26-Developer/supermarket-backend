@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import { Temporal } from "temporal-polyfill";
 
 import { numeric } from "../common/numeric";
+import { PaymentFailedException } from "../common/exceptions/payment-failed.exception";
 import { generateReference } from "../common/reference";
+import { PaymentProviderRegistry } from "../payments/payment-provider.registry";
+import type { PaymentInitiationResult } from "../payments/providers/payment-provider.interface";
 import { PrismaService } from "../prisma.service";
 import { StockService } from "../stock/stock.service";
-import type { CreateSaleDto, SaleItemDto } from "./dto/create-sale.dto";
+import type { CreateSaleDto, SaleItemDto, SalePaymentDto } from "./dto/create-sale.dto";
 
 interface SaleLine {
   product: { id: string; name: string; sku: string; taxRate: string };
@@ -17,11 +20,18 @@ interface SaleLine {
   lineTotal: number;
 }
 
+interface InitiatedPayment {
+  payment: SalePaymentDto;
+  reference: string;
+  result: PaymentInitiationResult;
+}
+
 @Injectable()
 export class SalesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(StockService) private readonly stock: StockService,
+    @Inject(PaymentProviderRegistry) private readonly paymentProviders: PaymentProviderRegistry,
   ) {}
 
   findAll(storeId?: string, sessionId?: string) {
@@ -65,6 +75,11 @@ export class SalesService {
         `Le total des paiements (${paymentsSum.toFixed(2)}) ne correspond pas au montant de la vente (${totalAmount.toFixed(2)})`,
       );
     }
+
+    // Paiements initiés AVANT la transaction DB — un vrai provider (MTN/Airtel,
+    // une fois branché) fait un appel réseau externe ici, qui ne doit jamais
+    // bloquer une transaction ouverte (voir payment-provider.interface.ts).
+    const initiatedPayments = await this.initiatePayments(dto.payments);
 
     return this.prisma.db.transaction(async (tx) => {
       const orderId = randomUUID();
@@ -165,20 +180,22 @@ export class SalesService {
         );
       }
 
-      for (const payment of dto.payments) {
+      for (const { payment, reference, result } of initiatedPayments) {
         await tx.orm.public.Payment.create({
           id: randomUUID(),
           orderId,
           saleId,
           sessionId: dto.sessionId,
-          reference: generateReference("PAY"),
+          reference,
           method: payment.method,
           direction: "IN",
-          status: "CONFIRMED",
+          // Toujours CONFIRMED ici : un paiement FAILED a déjà fait échouer
+          // initiatePayments() avant l'ouverture de cette transaction.
+          status: result.status,
           amount: numeric<14, 2>(payment.amount),
           currency: "XAF",
           transactionRef: payment.transactionRef ?? null,
-          providerRef: null,
+          providerRef: result.providerRef,
           paidAt: now,
           failureReason: null,
           metadata: null,
@@ -199,6 +216,37 @@ export class SalesService {
 
       return sale;
     });
+  }
+
+  /**
+   * Initie chaque paiement auprès de son provider (CASH confirme
+   * immédiatement ; les autres méthodes passent par le provider simulé —
+   * voir src/payments/). Si un seul paiement échoue, toute la vente est
+   * refusée avant même d'ouvrir la transaction DB : pas de vente à moitié
+   * payée.
+   */
+  private async initiatePayments(payments: SalePaymentDto[]): Promise<InitiatedPayment[]> {
+    const initiated = await Promise.all(
+      payments.map(async (payment): Promise<InitiatedPayment> => {
+        const reference = generateReference("PAY");
+        const provider = this.paymentProviders.resolve(payment.method);
+        const result = await provider.initiate({
+          amount: payment.amount,
+          reference,
+          forceFailure: payment.forceFailure,
+        });
+        return { payment, reference, result };
+      }),
+    );
+
+    const failed = initiated.find((p) => p.result.status === "FAILED");
+    if (failed) {
+      throw new PaymentFailedException(
+        failed.result.failureReason ?? `${failed.payment.method} refusé`,
+      );
+    }
+
+    return initiated;
   }
 
   private async buildLines(items: SaleItemDto[]) {

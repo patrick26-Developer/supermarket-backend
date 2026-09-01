@@ -308,6 +308,30 @@
               "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 2, \"unitPrice\": 4000 }\n  ],\n  \"payments\": [\n    { \"method\": \"CASH\", \"amount\": 8000 }\n  ]\n}"
             }
           }
+        },
+        {
+          "name": "Create sale (paiement MTN_MOMO simulé — succès)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/sales",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 1, \"unitPrice\": 4000 }\n  ],\n  \"payments\": [\n    { \"method\": \"MTN_MOMO\", \"amount\": 4000, \"transactionRef\": \"MTN-CLIENT-REF-001\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Create sale (paiement AIRTEL_MONEY simulé — échec forcé, 422 attendu)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/sales",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 1, \"unitPrice\": 4000 }\n  ],\n  \"payments\": [\n    { \"method\": \"AIRTEL_MONEY\", \"amount\": 4000, \"forceFailure\": true }\n  ]\n}"
+            }
+          }
         }
       ]
     }

@@ -47,7 +47,7 @@ export class UsersService {
   }
 
   async create(dto: CreateUserDto) {
-    await this.assertUnique(dto.email, dto.phone);
+    await this.assertUnique({ email: dto.email, phone: dto.phone });
     const passwordHash = await hash(dto.password, 12);
 
     const user = await this.prisma.db.orm.public.User.create({
@@ -72,6 +72,7 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto) {
     await this.assertExists(id);
+    if (dto.phone) await this.assertUnique({ phone: dto.phone, excludingId: id });
     await this.prisma.db.orm.public.User.where({ id }).update({ ...dto });
     return this.findOne(id);
   }
@@ -118,13 +119,25 @@ export class UsersService {
     if (!user) throw new NotFoundException("Utilisateur introuvable");
   }
 
-  private async assertUnique(email: string, phone?: string): Promise<void> {
-    const existingEmail = await this.prisma.db.orm.public.User.where({ email }).first();
-    if (existingEmail) throw new ConflictException(`L'email "${email}" est déjà utilisé`);
+  private async assertUnique(params: {
+    email?: string;
+    phone?: string;
+    excludingId?: string;
+  }): Promise<void> {
+    const { email, phone, excludingId } = params;
+
+    if (email) {
+      const existingEmail = await this.prisma.db.orm.public.User.where({ email }).first();
+      if (existingEmail && existingEmail.id !== excludingId) {
+        throw new ConflictException(`L'email "${email}" est déjà utilisé`);
+      }
+    }
 
     if (phone) {
       const existingPhone = await this.prisma.db.orm.public.User.where({ phone }).first();
-      if (existingPhone) throw new ConflictException(`Le téléphone "${phone}" est déjà utilisé`);
+      if (existingPhone && existingPhone.id !== excludingId) {
+        throw new ConflictException(`Le téléphone "${phone}" est déjà utilisé`);
+      }
     }
   }
 }

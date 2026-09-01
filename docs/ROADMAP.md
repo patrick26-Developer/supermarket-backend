@@ -46,6 +46,20 @@ Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur 
 - **Pas d'annulation/remboursement** : `Sale.status`, `PaymentStatus.REFUNDED`, `CashMovementType.CASH_REFUND` existent dans le contrat mais aucun endpoint ne les pilote encore.
 - **Référence générée côté app** (`generateReference()`, `src/common/reference.ts`), pas garantie unique sous forte concurrence (repose sur la contrainte `@unique` en base en dernier recours) — largement suffisant à l'échelle d'une caisse, à revisiter si univers multi-caisses à très fort débit.
 
+### Paiements mobile money — providers simulés en attendant les identifiants (2026-09-01)
+
+`src/payments/` introduit une abstraction `PaymentProvider` (`initiate(...) → { status, providerRef, failureReason }`) résolue par méthode via `PaymentProviderRegistry` :
+- `CashProvider` — confirmation immédiate, inchangé par rapport à avant.
+- `FakeMobileMoneyProvider` — couvre `MTN_MOMO`, `AIRTEL_MONEY`, `CARD`, `BANK_TRANSFER`, `OTHER` en attendant les vrais identifiants opérateur. Confirme toujours, sauf `forceFailure: true` explicite dans la requête (utile pour tester le chemin d'échec côté client Electron). `providerRef` toujours préfixé `FAKE-` — **ne jamais confondre avec une vraie transaction** une fois de vrais paiements en production (filtrer sur ce préfixe pour les rapports/l'audit).
+
+**Point de branchement pour les vrais opérateurs** : écrire `MtnMomoProvider`/`AirtelMoneyProvider` implémentant `PaymentProvider` (`src/payments/providers/payment-provider.interface.ts`), les enregistrer dans `PaymentProviderRegistry.resolve()`. **Aucun autre fichier à toucher** — `SalesService`, les DTOs, la base de données restent identiques.
+
+**Décision d'architecture volontaire** : `SalesService.create()` appelle `initiatePayments()` (résout tous les providers, un seul appel réseau externe futur par paiement) **avant** d'ouvrir la transaction DB — jamais d'appel réseau externe à l'intérieur d'une transaction ouverte (mauvais pour le pool de connexions, et un vrai paiement mobile money prend plusieurs secondes le temps que le client confirme sur son téléphone). Si un paiement échoue, toute la vente est refusée (`422 PaymentFailedException`) avant même que la moindre ligne ne soit écrite — aucun état intermédiaire "vente à moitié payée".
+
+**Ce que ça ne couvre pas encore** (à faire quand les vrais identifiants arrivent) : flux asynchrone réel (webhook de confirmation, polling de statut), un vrai paiement mobile money n'est jamais confirmé de façon synchrone dans la requête HTTP comme le simulateur le fait aujourd'hui — prévoir un état `PENDING` réellement tenu et un endpoint de confirmation quand ce jour arrive.
+
+**Bug découvert et corrigé en testant ce module** : `ValidateBodyPipe` ne remontait pas les messages d'erreur `class-validator` des DTOs imbriqués (`@ValidateNested({ each: true })`, ex. un `payments[].method` invalide) — un 400 correct était renvoyé mais avec `"message": []` (vide), car `class-validator` range ces erreurs dans `error.children`, pas dans `error.constraints` du champ parent. Corrigé par un parcours récursif dans `src/common/pipes/validate-body.pipe.ts`. **Concerne tous les DTOs à tableau imbriqué de l'app** (pas seulement les ventes) — vérifier qu'un message clair remonte bien pour toute nouvelle DTO du même genre.
+
 ### Note d'implémentation — champs `Numeric`/`Decimal`
 
 Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `Numeric<P, S>` côté ORM — une **chaîne brandée**, pas un `number`. Un `number` JS brut ne passe pas le type-check sur `.create()`/`.update()`. Convention adoptée : les DTOs restent en `number` (plus simple pour un client JSON), et le service convertit à la frontière avec `numeric<P, S>(value)` (`src/common/numeric.ts`). Utilisé dans `products.service.ts`, `stock.service.ts`, `cash-sessions.service.ts`, `sales.service.ts`.
