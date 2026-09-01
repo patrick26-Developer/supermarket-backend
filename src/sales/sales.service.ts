@@ -120,6 +120,21 @@ export class SalesService {
         totalAmount: numeric<14, 2>(totalAmount),
       });
 
+      // Reçu généré automatiquement pour chaque vente — voir ReceiptsModule
+      // pour la consultation (GET /api/receipts/:id, /orders/:orderId).
+      await tx.orm.public.Receipt.create({
+        id: randomUUID(),
+        orderId,
+        receiptNo: generateReference("REC"),
+        type: "SALE",
+        status: "ISSUED",
+        subtotal: numeric<14, 2>(subtotal),
+        discount: numeric<14, 2>(discountTotal),
+        tax: numeric<14, 2>(taxTotal),
+        total: numeric<14, 2>(totalAmount),
+        pdfUrl: null,
+      });
+
       for (const line of lines) {
         await tx.orm.public.SaleItem.create({
           id: randomUUID(),

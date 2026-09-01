@@ -33,11 +33,11 @@ Ces trois pièges sont invisibles à la compilation (`tsc --noEmit` passe), ils 
 Ordre suggéré, chaque module = controller + service + DTOs, en s'appuyant sur `db.orm.public.<Model>` :
 
 1. **Organizations / Stores** — CRUD minimal (souvent un seul tenant au départ). *Pas encore fait — l'org/store par défaut du seed suffit pour l'instant.*
-2. **Users / Roles** — gestion des comptes employés depuis l'app desktop (un admin crée les caissiers). *Pas encore fait.*
+2. [x] **Users / Roles** — `src/users/` (CRUD utilisateur, assignation/révocation de rôle, reset de mot de passe) + `src/users/roles.controller.ts` (`GET /api/roles`, catalogue en lecture seule). Un admin peut désormais créer un compte caissier avec `roles: ["CASHIER"]` dès la création, sans toucher à la base. Testé de bout en bout le 2026-09-01 (voir PROGRESS.md), y compris la vérification RBAC croisée : un compte `CASHIER` fraîchement créé se voit refuser `POST /categories` (403) mais autoriser `GET /products` (200) — la même logique de permission que l'admin, cohérente pour tout nouvel utilisateur.
 3. [x] **Catalogue** — `Category`, `Brand`, `Product` : CRUD complet + `GET /products?search=` + `GET /products/code/:code` (lookup SKU/code-barres pour la caisse). Testé de bout en bout le 2026-08-31 (voir PROGRESS.md). `ProductBarcode` (codes-barres multiples) et `ProductPrice` (prix par magasin) **restent à faire** — le lookup actuel ne couvre que le SKU exact, pas encore une table de codes-barres dédiée.
 4. [x] **Stock** — `Stock` (quantité par magasin/produit) + `StockMovement` (ledger append-only). `POST /api/stock/movements` est le seul point d'entrée censé faire varier une quantité (transaction DB atomique : lecture du stock courant, calcul, upsert `Stock`, insertion `StockMovement`). Garde-fous testés : stock insuffisant refusé (400), quantité négative refusée pour les types à sens fixe, `INVENTORY_CORRECTION` accepte un delta signé. `StockService` exporté par `StockModule` pour être appelé directement par les futurs modules Vente/Achat plutôt que de dupliquer la logique. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md).
 5. [x] **Vente / Caisse** — `CashRegister` (CRUD léger) + `CashierSession` (ouvrir/clôturer, une seule session `OPEN` par caisse à la fois) + `CashMovement` (ledger, mouvements manuels + `CASH_SALE` automatique) + `Sale`/`SaleItem`/`Order`/`OrderItem`/`Payment`. `POST /api/sales` est LE flux transactionnel critique : une seule transaction DB crée `Order` + `OrderItem[]` + `Sale` + `SaleItem[]` + décrémente le stock via `StockService.recordMovement(..., tx)` + crée `Payment[]` + `CashMovement` (`CASH_SALE`) si paiement cash — tout ou rien. `POST /api/cash-sessions/:id/close` recalcule les totaux (ventes, encaissements, sorties) depuis le ledger `CashMovement`/`Sale` plutôt que depuis un compteur incrémental, pour éviter toute dérive. Testé de bout en bout le 2026-08-31 (voir PROGRESS.md), y compris le rollback complet sur stock insuffisant en cours de vente.
-6. **Reçus** — génération `Receipt` a minima en base ; l'impression/PDF peut venir plus tard. *Pas encore fait.*
+6. [x] **Reçus** — `Receipt` généré automatiquement dans la même transaction que chaque vente (`SalesService.create()`), `GET /api/receipts/:id` et `GET /api/receipts/by-order/:orderId` pour la consultation. Pas d'impression/PDF (`pdfUrl` reste `null` pour l'instant) — a minima en base comme prévu.
 
 ### Limites connues du module Vente (V1)
 
@@ -57,6 +57,17 @@ Les colonnes `Numeric(P, S)` du contrat (prix, quantités, taux) sont typées `N
 ### ⚠️ Piège infra rencontré — port PostgreSQL
 
 Un PostgreSQL natif (service Windows, partagé avec d'autres projets) écoutait déjà sur le port `5432` standard. `docker-compose.yml` publiait aussi sur `5432` : le conteneur du projet démarrait "healthy" mais **l'app parlait en réalité à l'instance native** (aucune erreur — les deux bases acceptaient les mêmes identifiants). Corrigé en republiant le conteneur sur `5433` (`docker-compose.yml` + `DATABASE_URL`). Symptôme qui aurait dû alerter plus tôt : des tables `user`/`post` (étrangères au contrat) visibles en interrogeant la base — signe qu'elle est partagée avec un autre projet.
+
+### ⚠️ Piège infra récurrent — forwarding de port cassé après veille/redémarrage Docker
+
+Après une mise en veille de la machine (ou un redémarrage de Docker Desktop), le conteneur `superette-postgres` peut redevenir "healthy" côté Docker tout en refusant les connexions réelles depuis l'app (`CONTRACT.MARKER_READ_FAILED` / `Connection terminated unexpectedly` dans les logs NestJS), alors que `psql` **depuis l'intérieur du conteneur** fonctionne — c'est le forwarding de port Windows→WSL2→conteneur qui reste dans un état bancal, pas la base elle-même. **Symptôme observé une fois en session** (2026-09-01) : login qui renvoie 500 juste après une reprise de veille.
+
+**Diagnostic rapide** : `Test-NetConnection -Port 5433` réussit (juste un SYN/ACK) mais une vraie requête SQL échoue → c'est ce piège, pas un problème de données.
+**Correctif** : `docker compose down && docker compose up -d` (recrée le conteneur, force un forwarding propre) puis redémarrer le serveur Node. Les données survivent (volume Docker persistant) — aucune perte, juste un redémarrage réseau.
+
+## Phase 1 — état global
+
+Le MVP point de vente est fonctionnellement complet : auth, catalogue, stock, caisse/ventes, reçus, gestion des employés. Il ne manque que la gestion CRUD des organisations/magasins eux-mêmes (non bloquant, l'org/magasin par défaut du seed suffit pour une V1 mono-magasin). Prochaine étape naturelle : **Phase 2**, ou démarrage du client Electron en parallèle puisque le contrat d'API est maintenant stable sur l'essentiel du parcours caisse.
 
 ## Phase 2 — Modules étendus
 

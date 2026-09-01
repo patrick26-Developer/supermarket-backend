@@ -87,14 +87,35 @@
       ]
     },
     {
-      "name": "Users",
+      "name": "Users & Roles",
       "item": [
+        { "name": "List roles", "request": { "method": "GET", "url": "{{baseUrl}}/api/roles" } },
+        { "name": "List users (?status=ACTIVE)", "request": { "method": "GET", "url": "{{baseUrl}}/api/users" } },
+        { "name": "Get user", "request": { "method": "GET", "url": "{{baseUrl}}/api/users/{{newUserId}}" } },
         {
-          "name": "List users",
+          "name": "Create user (rôle CASHIER)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { pm.collectionVariables.set('newUserId', pm.response.json().id); }"] } }],
           "request": {
-            "method": "GET",
-            "url": "{{baseUrl}}/api/users"
+            "method": "POST",
+            "url": "{{baseUrl}}/api/users",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"marie.caissiere@superette.local\",\n  \"password\": \"Cashier@123\",\n  \"firstName\": \"Marie\",\n  \"lastName\": \"Ngoma\",\n  \"roles\": [\"CASHIER\"]\n}" }
           }
+        },
+        { "name": "Update user", "request": { "method": "PUT", "url": "{{baseUrl}}/api/users/{{newUserId}}", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"phone\": \"+242061234567\"\n}" } } },
+        { "name": "Assign role", "request": { "method": "POST", "url": "{{baseUrl}}/api/users/{{newUserId}}/roles", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"roleCode\": \"STOCK_MANAGER\"\n}" } } },
+        { "name": "Revoke role", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/users/{{newUserId}}/roles/STOCK_MANAGER" } },
+        { "name": "Reset password", "request": { "method": "POST", "url": "{{baseUrl}}/api/users/{{newUserId}}/reset-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"newPassword\": \"NouveauMdp@123\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Receipts",
+      "item": [
+        { "name": "Get by id", "request": { "method": "GET", "url": "{{baseUrl}}/api/receipts/{{receiptId}}" } },
+        {
+          "name": "Get by order (exécuter après Sales > Create sale)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 200) { pm.collectionVariables.set('receiptId', pm.response.json().id); }"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/receipts/by-order/{{orderId}}" }
         }
       ]
     },
@@ -277,7 +298,7 @@
         { "name": "Get one (avec items + payments)", "request": { "method": "GET", "url": "{{baseUrl}}/api/sales/{{saleId}}" } },
         {
           "name": "Create sale (1 article, paiement CASH)",
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { pm.collectionVariables.set('saleId', pm.response.json().id); }"] } }],
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { const body = pm.response.json(); pm.collectionVariables.set('saleId', body.id); pm.collectionVariables.set('orderId', body.orderId); }"] } }],
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/sales",
@@ -300,6 +321,9 @@
     { "key": "storeId", "value": "", "description": "Id du magasin par défaut créé par npm run seed — à renseigner manuellement (voir pgAdmin ou GET /api/stock après une première requête)." },
     { "key": "cashRegisterId", "value": "" },
     { "key": "sessionId", "value": "" },
-    { "key": "saleId", "value": "" }
+    { "key": "saleId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "receiptId", "value": "" },
+    { "key": "newUserId", "value": "" }
   ]
 }

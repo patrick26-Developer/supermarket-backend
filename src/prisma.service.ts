@@ -6,20 +6,6 @@ import type { PermissionAction, PermissionResource, RoleCode } from "./auth/type
 export class PrismaService {
   readonly db = db;
 
-  listUsers(limit = 10) {
-    return db.orm.public.User.select(
-      "id",
-      "email",
-      "firstName",
-      "lastName",
-      "status",
-      "createdAt",
-    )
-      .orderBy((u) => u.createdAt.desc())
-      .limit(limit)
-      .all();
-  }
-
   /**
    * RBAC : est-ce qu'au moins un des rôles fournis porte la permission
    * (resource, action) demandée ? Résolu en base à chaque appel (et non

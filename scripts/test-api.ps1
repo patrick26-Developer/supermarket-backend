@@ -362,5 +362,95 @@ if ($session) {
 }
 
 Write-Host "`n################################################################" -ForegroundColor Magenta
+Write-Host "# 9. REÇUS (généré automatiquement par la vente ci-dessus)" -ForegroundColor Magenta
+Write-Host "################################################################" -ForegroundColor Magenta
+
+$receipt = $null
+if ($sale) {
+    $receipt = Invoke-ApiTest "GET /api/receipts/by-order/:orderId" {
+        Invoke-RestMethod "$baseUrl/api/receipts/by-order/$($sale.orderId)" -Headers $headers
+    }
+}
+
+if ($receipt) {
+    Invoke-ApiTest "GET /api/receipts/:id" {
+        Invoke-RestMethod "$baseUrl/api/receipts/$($receipt.id)" -Headers $headers
+    }
+}
+
+
+Write-Host "`n################################################################" -ForegroundColor Magenta
+Write-Host "# 10. UTILISATEURS & RÔLES" -ForegroundColor Magenta
+Write-Host "################################################################" -ForegroundColor Magenta
+
+Invoke-ApiTest "GET /api/roles — catalogue des 11 rôles système" {
+    Invoke-RestMethod "$baseUrl/api/roles" -Headers $headers
+}
+
+Invoke-ApiTest "GET /api/users" {
+    Invoke-RestMethod "$baseUrl/api/users" -Headers $headers
+}
+
+# Email unique à chaque exécution pour que le script reste rejouable sans 409.
+$testEmail = "test.cashier.$(Get-Date -Format 'yyyyMMddHHmmss')@superette.local"
+
+$newUser = Invoke-ApiTest "POST /api/users — créer un caissier avec rôle CASHIER (201 attendu)" {
+    Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users" -Headers $headers -ContentType "application/json" -Body (@{
+        email = $testEmail; password = "Cashier@123"; firstName = "Test"; lastName = "Caissier"; roles = @("CASHIER")
+    } | ConvertTo-Json)
+}
+
+Invoke-ApiTest "POST /api/users — email dupliqué (409 attendu)" {
+    Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users" -Headers $headers -ContentType "application/json" -Body (@{
+        email = $testEmail; password = "Autre@1234"; firstName = "X"; lastName = "Y"
+    } | ConvertTo-Json)
+}
+
+Invoke-ApiTest "POST /api/users — champs requis manquants (400 attendu)" {
+    Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users" -Headers $headers -ContentType "application/json" `
+        -Body (@{ email = "incomplet@test.local" } | ConvertTo-Json)
+}
+
+if ($newUser) {
+    # Vérifie que le RBAC s'applique bien à un compte fraîchement créé, pas seulement au seed.
+    $cashierLogin = Invoke-ApiTest "POST /api/auth/login — connexion avec le nouveau compte (200 attendu)" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/auth/login" -ContentType "application/json" `
+            -Body (@{ email = $testEmail; password = "Cashier@123" } | ConvertTo-Json)
+    }
+    if ($cashierLogin) {
+        $cashierHeaders = @{ Authorization = "Bearer $($cashierLogin.accessToken)" }
+
+        Invoke-ApiTest "Nouveau compte : POST /api/categories (403 attendu — CASHIER n'a pas CATEGORIES:CREATE)" {
+            Invoke-RestMethod -Method Post -Uri "$baseUrl/api/categories" -Headers $cashierHeaders -ContentType "application/json" `
+                -Body (@{ name = "Test RBAC"; slug = "test-rbac-$(Get-Random)" } | ConvertTo-Json)
+        }
+
+        Invoke-ApiTest "Nouveau compte : GET /api/products (200 attendu — CASHIER a PRODUCTS:READ)" {
+            Invoke-RestMethod "$baseUrl/api/products" -Headers $cashierHeaders
+        }
+    }
+
+    Invoke-ApiTest "PUT /api/users/:id — mise à jour du téléphone" {
+        Invoke-RestMethod -Method Put -Uri "$baseUrl/api/users/$($newUser.id)" -Headers $headers -ContentType "application/json" `
+            -Body (@{ phone = "+242069999999" } | ConvertTo-Json)
+    }
+
+    Invoke-ApiTest "POST /api/users/:id/roles — assigner STOCK_MANAGER en plus" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users/$($newUser.id)/roles" -Headers $headers -ContentType "application/json" `
+            -Body (@{ roleCode = "STOCK_MANAGER" } | ConvertTo-Json)
+    }
+
+    Invoke-ApiTest "DELETE /api/users/:id/roles/STOCK_MANAGER — révoquer" {
+        Invoke-RestMethod -Method Delete -Uri "$baseUrl/api/users/$($newUser.id)/roles/STOCK_MANAGER" -Headers $headers
+    }
+
+    Invoke-ApiTest "POST /api/users/:id/reset-password" {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users/$($newUser.id)/reset-password" -Headers $headers -ContentType "application/json" `
+            -Body (@{ newPassword = "NouveauMdp@123" } | ConvertTo-Json)
+    }
+}
+
+
+Write-Host "`n################################################################" -ForegroundColor Magenta
 Write-Host "# Terminé." -ForegroundColor Magenta
 Write-Host "################################################################" -ForegroundColor Magenta

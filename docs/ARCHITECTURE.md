@@ -42,18 +42,27 @@ Backend API pour la gestion d'une chaîne de superettes/supermarchés (multi-org
 ```
 supermarket-backend/
 ├── src/
-│   ├── main.ts                 # bootstrap NestJS
-│   ├── app.module.ts           # module racine
-│   ├── app.controller.ts       # GET /
-│   ├── users.controller.ts     # GET /users
-│   ├── users.service.ts
-│   ├── prisma.service.ts       # wrapper injectable autour de `db`
-│   └── prisma/
-│       ├── contract.prisma     # ⭐ source de vérité du schéma de données
-│       ├── contract.json       # généré — ne pas éditer à la main
-│       ├── contract.d.ts       # généré — ne pas éditer à la main
-│       ├── db.ts               # client runtime (`export const db`)
-│       └── composer.ts         # binding du contrat pour Prisma Composer
+│   ├── main.ts                 # bootstrap NestJS (préfixe /api, ValidationPipe, CORS)
+│   ├── app.module.ts           # module racine — importe tous les modules métier
+│   ├── app.controller.ts       # GET / (health-check public, hors préfixe)
+│   ├── prisma.service.ts       # wrapper injectable autour de `db` + hasPermission() (RBAC)
+│   ├── prisma/
+│   │   ├── contract.prisma     # ⭐ source de vérité du schéma de données
+│   │   ├── contract.json       # généré — ne pas éditer à la main
+│   │   ├── contract.d.ts       # généré — ne pas éditer à la main
+│   │   ├── db.ts               # client runtime (`export const db`)
+│   │   ├── prisma.module.ts    # @Global() — rend PrismaService injectable partout
+│   │   └── seed.ts             # organisation/magasin par défaut, permissions, rôles, admin
+│   ├── auth/                   # login JWT, guards, RBAC (@RequirePermission)
+│   ├── users/                  # CRUD utilisateurs, rôles, reset mot de passe
+│   ├── catalog/                # Category, Brand, Product (CRUD + recherche + lookup SKU)
+│   ├── stock/                  # Stock + StockMovement (ledger append-only)
+│   ├── cash/                   # CashRegister, CashierSession (ouvrir/fermer/mouvements)
+│   ├── sales/                  # POST /api/sales — le flux transactionnel du POS
+│   ├── receipts/                # Receipt (généré automatiquement par une vente)
+│   └── common/                 # ValidateBodyPipe, numeric(), generateReference(), DbLike
+├── scripts/
+│   └── test-api.ps1            # smoke-test PowerShell de tous les endpoints
 ├── migrations/
 │   ├── app/
 │   │   ├── <horodatage>_baseline/   # migrations versionnées (graphe)
@@ -62,9 +71,11 @@ supermarket-backend/
 ├── module.ts, service.ts       # définition de l'app pour Prisma Composer (déploiement cloud)
 ├── prisma.config.ts            # config CLI Prisma (contrat, connexion, composer)
 ├── prisma-composer.config.ts   # config Composer (extensions, state)
-├── docker-compose.yml          # Postgres 16 + pgAdmin pour le dev local
-└── docs/                       # ce dossier
+├── docker-compose.yml          # Postgres 16 (port hôte 5433) + pgAdmin pour le dev local
+└── docs/                       # ce dossier (+ docs/postman/ : collection + environnement)
 ```
+
+Chaque module métier suit le même patron : `*.controller.ts` (routes + `@RequirePermission`), `*.service.ts` (logique + accès `db.orm.public.<Model>`), `dto/*.ts` (validation `class-validator`, toujours consommés via `ValidateBodyPipe` — voir § *Gotcha toolchain* dans `ROADMAP.md`), `types/*-enums.ts` (valeurs runtime + types dérivés pour les enums du contrat).
 
 ## 4. Modèle de données (contract.prisma)
 

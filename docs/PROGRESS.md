@@ -2,6 +2,32 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-09-01 — Module Utilisateurs/Rôles + Reçus (Phase 1.2 et 1.6) — MVP Phase 1 complet
+
+**Incident résolu en début de session** : après une pause/veille de la machine, `POST /api/auth/login` renvoyait 500. Diagnostic : le conteneur Docker Postgres redevenu "healthy" refusait en réalité les connexions réelles (forwarding de port Windows→WSL2 resté bancal après le redémarrage du conteneur) — `psql` depuis l'intérieur du conteneur fonctionnait, mais toute connexion externe (Node `pg`, l'app) échouait avec `Connection terminated unexpectedly`. Résolu par `docker compose down && up` (recrée le conteneur, force un forwarding propre) ; données vérifiées intactes ensuite (volume Docker persistant). Documenté dans `docs/ROADMAP.md` comme piège récurrent à surveiller.
+
+**Livré — `src/users/`** : CRUD utilisateur complet (`POST/GET/PUT /api/users`, `GET /api/users/:id`), assignation/révocation de rôle (`POST /api/users/:id/roles`, `DELETE /api/users/:id/roles/:roleCode`), reset de mot de passe admin (`POST /api/users/:id/reset-password`), filtre par statut. `roles.controller.ts` expose `GET /api/roles` (catalogue en lecture seule des 11 rôles système). Ancien `src/users.controller.ts`/`users.service.ts` (plats, un seul `findAll`) retirés et remplacés ; `PrismaService.listUsers()` supprimé (logique déplacée dans le nouveau service).
+
+**Livré — `src/receipts/`** : `Receipt` généré automatiquement dans la transaction de `SalesService.create()` (aucune action manuelle requise), consultable via `GET /api/receipts/:id` et `GET /api/receipts/by-order/:orderId`.
+
+**Testé de bout en bout** (contre le conteneur Docker, après résolution de l'incident) :
+
+| Scénario | Résultat |
+|---|---|
+| `GET /api/roles` | les 11 rôles système, id réels |
+| Créer un utilisateur "Marie" avec `roles: ["CASHIER"]` | rôle imbriqué dans la réponse (`.include()` à deux niveaux : `User → UserRole → Role`) |
+| **Login avec le nouveau compte** | fonctionne immédiatement — le compte est utilisable sans étape supplémentaire |
+| Marie tente `POST /api/categories` | 403 (`CASHIER` n'a pas `CATEGORIES:CREATE`) — RBAC appliqué à un compte fraîchement créé, pas seulement à l'admin du seed |
+| Marie fait `GET /api/products` | 200 (`CASHIER` a `PRODUCTS:READ`) |
+| Créer un utilisateur avec un email déjà pris | 409 |
+| `PUT /api/users/:id` (téléphone) | mis à jour |
+| `POST /api/users/:id/reset-password` | `passwordChangedAt` mis à jour |
+| `DELETE /api/users/:id/roles/CASHIER` | rôle retiré, `roles: []` dans la réponse |
+| `POST /api/users` sans password/firstName/lastName | 400, messages de validation détaillés |
+| Vente complète → `GET /api/receipts/by-order/:orderId` | reçu retrouvé, montants cohérents avec la vente |
+
+**État Phase 1 (MVP point de vente)** : complet à l'exception du CRUD Organizations/Stores (non bloquant). Voir `docs/ROADMAP.md` § *Phase 1 — état global*.
+
 ## 2026-08-31 (suite 4) — Module Vente/Caisse (Phase 1.5)
 
 **Livré** : `src/cash/` (`CashRegister` CRUD léger, `CashierSession` ouvrir/fermer/mouvements manuels) et `src/sales/` (`POST /api/sales`, le cœur transactionnel du POS).
