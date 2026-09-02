@@ -60,7 +60,13 @@ supermarket-backend/
 │   ├── cash/                   # CashRegister, CashierSession (ouvrir/fermer/mouvements)
 │   ├── sales/                  # POST /api/sales — le flux transactionnel du POS
 │   ├── receipts/                # Receipt (généré automatiquement par une vente)
-│   └── common/                 # ValidateBodyPipe, numeric(), generateReference(), DbLike
+│   ├── payments/                # Providers de paiement (Cash, Fake mobile money — voir ROADMAP)
+│   ├── suppliers/, purchasing/  # Supplier, PurchaseOrder, GoodsReceipt (alimente le stock)
+│   ├── inventory/               # StockAdjustment, InventoryCount (corrigent le stock)
+│   ├── customers/, delivery/    # Customer/CustomerAddress, Delivery (créée par une vente DELIVERY)
+│   ├── audit/                   # @Global() — AuditService.log(...), GET /api/audit-logs
+│   ├── reports/                 # Agrégations : sales-summary, stock-value, top-products
+│   └── common/                  # ValidateBodyPipe, numeric(), generateReference(), DbLike
 ├── scripts/
 │   └── test-api.ps1            # smoke-test PowerShell de tous les endpoints
 ├── migrations/
@@ -99,7 +105,7 @@ Le contrat couvre **41 modèles** organisés en domaines métier, en `XAF/FCFA` 
 
 Le rôle métier (`RoleCode`) couvre déjà : `SUPER_ADMIN`, `ADMIN`, `STORE_MANAGER`, `CASHIER`, `STOCK_MANAGER`, `PURCHASING_MANAGER`, `SALES_MANAGER`, `ACCOUNTANT`, `DELIVERY_AGENT`, `AUDITOR`, `CUSTOMER`.
 
-> **Le contrat est très avancé, l'API applicative ne l'est pas encore.** Voir [`ROADMAP.md`](./ROADMAP.md) — seuls `GET /` et `GET /users` existent aujourd'hui.
+> **Mise à jour 2026-09-02** : l'API applicative couvre désormais la quasi-totalité de ce contrat (auth, catalogue, stock, caisse/ventes, achats, inventaires, clients/livraison, audit, rapports). Reste hors périmètre : CRUD Organizations/Stores, Invoice (facture B2B), remboursements/annulations de vente. Voir [`ROADMAP.md`](./ROADMAP.md) pour le détail phase par phase.
 
 ## 5. Cycle de vie du contrat de données
 

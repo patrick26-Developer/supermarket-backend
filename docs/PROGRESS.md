@@ -2,6 +2,43 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-09-02 — Phase 2 complète : achats, inventaires, clients/livraison, audit, rapports
+
+**Six nouveaux modules livrés en une session** (`src/suppliers/`, `src/purchasing/`, `src/inventory/`, `src/customers/`, `src/delivery/`, `src/audit/`, `src/reports/`), tous suivant les patterns déjà établis (transaction + `StockService.recordMovement(..., tx)` pour tout ce qui touche au stock, `ValidateBodyPipe` pour la validation, permissions déjà seedées le 2026-08-31 — **aucune modification du seed nécessaire**, le catalogue de rôles avait été conçu en anticipant ces ressources).
+
+**Achats fournisseurs** — `Supplier` (CRUD) → `PurchaseOrder` (DRAFT→SUBMITTED→APPROVED, montants calculés) → `GoodsReceipt` (refusée tant que le PO n'est pas `APPROVED`, incrémente le stock dans la même transaction que la réception, marque le PO `RECEIVED`).
+
+**Ajustements & inventaires** — `StockAdjustment` (snapshote `previousQuantity`/`newQuantity` à la création, `POST /:id/apply` applique réellement la correction). `InventoryCount` (snapshote `expectedQty` depuis le stock courant, `POST /:id/approve` applique les écarts via `StockMovement` type `INVENTORY_CORRECTION`).
+
+**Clients & livraison** — `Customer`/`CustomerAddress` en CRUD classique. Décision d'architecture : plutôt que d'inventer un flux de commande client autonome (web/téléphone), `Delivery` est créée **automatiquement par `SalesService.create()`** quand la requête porte `fulfillment: "DELIVERY"` — cohérent avec un magasin physique où le client paie en caisse puis se fait livrer. `CreateSaleDto` étendu (`fulfillment?`, `deliveryAddressId?`, `deliveryFee?`), non-breaking (défaut `IN_STORE`, frais 0). Cycle `PENDING→ASSIGNED→PICKED_UP→IN_TRANSIT→DELIVERED/FAILED/CANCELLED` avec historique, transition bloquée une fois un statut terminal atteint, `failureReason` obligatoire sur `FAILED`.
+
+**Audit** — `AuditService` (module `@Global()`) appelé explicitement (pas d'intercepteur générique) après succès aux points sensibles : login, ouverture/fermeture de caisse, approbation d'achat/inventaire, ajustement de stock appliqué. Toujours appelé **après** la transaction, jamais depuis l'intérieur — le journal reflète ce qui s'est réellement passé.
+
+**Rapports** — `sales-summary`, `stock-value` (valorisation au coût d'achat), `top-products`, agrégés en JS après un fetch ciblé (même approche que la clôture de caisse).
+
+**Un piège de typage rencontré** : `.include("items", (i) => i)` (identité, sans `.select()`) — qui fonctionnait pour un simple retour au client (`sales.service.ts`, `purchase-orders.service.ts`) — perd le typage des champs (`unknown`) dès qu'on **lit** ces champs pour de la logique métier (`stock-adjustments.service.ts`, `inventory-counts.service.ts` doivent lire `item.productId`/`item.difference` pour appliquer les mouvements de stock). Corrigé en explicitant `.select(...)` dans le callback d'`include`. Retenir : dès qu'un include imbriqué est *consommé* par du code (pas juste renvoyé), lui donner un `.select()` explicite.
+
+**Testé de bout en bout** (contre le conteneur Docker, scénario complet enchaîné) :
+
+| Étape | Résultat |
+|---|---|
+| Réception avant approbation du PO | 400, refusé |
+| Submit → Approve → Réception (50kg riz) | stock 108 → 158 ✓, PO passé `RECEIVED` |
+| Ajustement de stock (casse -5) créé puis appliqué | stock 158 → 153 ✓ |
+| Inventaire (compté 150) créé puis approuvé | stock 153 → 150 ✓ (écart -3 appliqué) |
+| Client + adresse créés | OK |
+| Vente avec `fulfillment: DELIVERY`, frais 1500 | total = 8000 (marchandise) + 1500 = 9500 ✓, `Delivery` créée automatiquement en `PENDING` |
+| Assign → PICKED_UP → IN_TRANSIT → DELIVERED | historique de 4 entrées, chaque timestamp posé correctement |
+| Transition après `DELIVERED` | 400, statut terminal respecté |
+| `FAILED` sans `failureReason` | 400 |
+| Fournisseur code dupliqué | 409 |
+| `GET /api/audit-logs` | 5 entrées cohérentes (LOGIN, OPEN_SESSION, 2×APPROVE, STOCK_ADJUSTMENT) avec description lisible |
+| `GET /api/reports/sales-summary` | revenu total cohérent avec les ventes créées pendant la session |
+| `GET /api/reports/stock-value` | valorisation = quantité réelle × coût d'achat, vérifiée à la main |
+| `GET /api/reports/top-products` | exclut correctement les frais de livraison (comptés au niveau vente, pas ligne produit) |
+
+**Phase 2 de la roadmap marquée complète.** Note : `docs/postman/` et `scripts/test-api.ps1` n'ont pas encore été étendus avec les 6 nouveaux modules (testés en HTTP direct pendant cette session, voir tableau ci-dessus) — à faire en petit complément si des tests manuels réguliers sur ces routes sont utiles. Prochaine étape : démarrage du client Electron (`Projets/app-desktop/superette/`).
+
 ## 2026-09-01 (suite) — Paiements mobile money simulés (providers)
 
 **Contexte** : pas encore d'identifiants MTN/Airtel Money. Décision prise avec l'utilisateur avant codage (voir échange) : ne pas construire l'infrastructure asynchrone complète (webhooks, vérification de signature) contre une API qu'on ne connaît pas encore — probablement à refaire une fois la vraie doc en main. À la place : un pattern adaptateur qui isole totalement la simulation, pour un remplacement à coût zéro ailleurs dans le code le jour venu.

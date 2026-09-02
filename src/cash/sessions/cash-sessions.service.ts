@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { randomUUID } from "node:crypto";
 import { Temporal } from "temporal-polyfill";
 
+import { AuditService } from "../../audit/audit.service";
 import { numeric } from "../../common/numeric";
 import { PrismaService } from "../../prisma.service";
 import type { CashSessionStatusValue } from "../types/cash-enums";
@@ -12,7 +13,10 @@ import type { RecordCashMovementDto } from "./dto/record-cash-movement.dto";
 
 @Injectable()
 export class CashSessionsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   findAll(status?: string, cashRegisterId?: string) {
     let query = this.prisma.db.orm.public.CashierSession.orderBy((s) => s.openedAt.desc());
@@ -41,8 +45,8 @@ export class CashSessionsService {
       .first();
     if (alreadyOpen) throw new ConflictException("Une session est déjà ouverte sur cette caisse");
 
-    return this.prisma.db.transaction(async (tx) => {
-      const session = await tx.orm.public.CashierSession.create({
+    const session = await this.prisma.db.transaction(async (tx) => {
+      const created = await tx.orm.public.CashierSession.create({
         id: randomUUID(),
         cashRegisterId: dto.cashRegisterId,
         cashierId,
@@ -57,7 +61,7 @@ export class CashSessionsService {
 
       await tx.orm.public.CashMovement.create({
         id: randomUUID(),
-        sessionId: session.id,
+        sessionId: created.id,
         type: "OPENING_FLOAT",
         amount: numeric<14, 2>(dto.openingAmount),
         reason: null,
@@ -65,8 +69,19 @@ export class CashSessionsService {
         referenceId: null,
       });
 
-      return session;
+      return created;
     });
+
+    await this.audit.log({
+      userId: cashierId,
+      storeId: register.storeId,
+      action: "OPEN_SESSION",
+      resource: "CASH_SESSIONS",
+      resourceId: session.id,
+      description: `Ouverture caisse ${register.code}, fond ${dto.openingAmount}`,
+    });
+
+    return session;
   }
 
   async recordMovement(sessionId: string, dto: RecordCashMovementDto) {
@@ -101,10 +116,13 @@ export class CashSessionsService {
     });
   }
 
-  async close(sessionId: string, dto: CloseSessionDto) {
-    await this.assertOpen(sessionId);
+  async close(sessionId: string, dto: CloseSessionDto, cashierId: string) {
+    const session = await this.assertOpen(sessionId);
+    const register = await this.prisma.db.orm.public.CashRegister.where({
+      id: session.cashRegisterId,
+    }).first();
 
-    return this.prisma.db.transaction(async (tx) => {
+    const closing = await this.prisma.db.transaction(async (tx) => {
       const movements = await tx.orm.public.CashMovement.where({ sessionId }).all();
       const sumByType = (type: string) =>
         movements
@@ -145,6 +163,17 @@ export class CashSessionsService {
         notes: dto.notes ?? null,
       });
     });
+
+    await this.audit.log({
+      userId: cashierId,
+      storeId: register?.storeId ?? null,
+      action: "CLOSE_SESSION",
+      resource: "CASH_SESSIONS",
+      resourceId: sessionId,
+      description: `Clôture caisse${register ? " " + register.code : ""}, écart ${closing.difference}`,
+    });
+
+    return closing;
   }
 
   private async assertOpen(sessionId: string) {

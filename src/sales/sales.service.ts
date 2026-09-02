@@ -67,7 +67,22 @@ export class SalesService {
       if (!customer) throw new NotFoundException("Client introuvable");
     }
 
-    const { lines, subtotal, discountTotal, taxTotal, totalAmount } = await this.buildLines(dto.items);
+    const fulfillment = dto.fulfillment ?? "IN_STORE";
+    if (fulfillment === "DELIVERY" && dto.deliveryAddressId) {
+      const address = await this.prisma.db.orm.public.CustomerAddress.where({
+        id: dto.deliveryAddressId,
+      }).first();
+      if (!address) throw new NotFoundException("Adresse de livraison introuvable");
+      if (dto.customerId && address.customerId !== dto.customerId) {
+        throw new BadRequestException("Cette adresse n'appartient pas au client indiqué");
+      }
+    }
+    const deliveryFee = fulfillment === "DELIVERY" ? (dto.deliveryFee ?? 0) : 0;
+
+    const { lines, subtotal, discountTotal, taxTotal, totalAmount: goodsTotal } = await this.buildLines(
+      dto.items,
+    );
+    const totalAmount = goodsTotal + deliveryFee;
 
     const paymentsSum = dto.payments.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(paymentsSum - totalAmount) > 0.01) {
@@ -92,12 +107,12 @@ export class SalesService {
         createdById: cashierId,
         reference: generateReference("ORD"),
         channel: "POS",
-        fulfillment: "IN_STORE",
+        fulfillment,
         status: "COMPLETED",
         subtotal: numeric<14, 2>(subtotal),
         discountAmount: numeric<14, 2>(discountTotal),
         taxAmount: numeric<14, 2>(taxTotal),
-        deliveryFee: numeric<14, 2>(0),
+        deliveryFee: numeric<14, 2>(deliveryFee),
         totalAmount: numeric<14, 2>(totalAmount),
         notes: dto.notes ?? null,
         confirmedAt: now,
@@ -149,6 +164,25 @@ export class SalesService {
         total: numeric<14, 2>(totalAmount),
         pdfUrl: null,
       });
+
+      if (fulfillment === "DELIVERY") {
+        await tx.orm.public.Delivery.create({
+          id: randomUUID(),
+          orderId,
+          storeId: dto.storeId,
+          addressId: dto.deliveryAddressId ?? null,
+          agentId: null,
+          status: "PENDING",
+          failureReason: null,
+          deliveryFee: numeric<14, 2>(deliveryFee),
+          scheduledAt: null,
+          assignedAt: null,
+          pickedUpAt: null,
+          deliveredAt: null,
+          failedAt: null,
+          notes: null,
+        });
+      }
 
       for (const line of lines) {
         await tx.orm.public.SaleItem.create({

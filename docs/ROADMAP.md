@@ -83,14 +83,21 @@ Après une mise en veille de la machine (ou un redémarrage de Docker Desktop), 
 
 Le MVP point de vente est fonctionnellement complet : auth, catalogue, stock, caisse/ventes, reçus, gestion des employés. Il ne manque que la gestion CRUD des organisations/magasins eux-mêmes (non bloquant, l'org/magasin par défaut du seed suffit pour une V1 mono-magasin). Prochaine étape naturelle : **Phase 2**, ou démarrage du client Electron en parallèle puisque le contrat d'API est maintenant stable sur l'essentiel du parcours caisse.
 
-## Phase 2 — Modules étendus
+## Phase 2 — Modules étendus — ✅ complète (2026-09-02)
 
-- Achats fournisseurs (`Supplier`, `PurchaseOrder`, `GoodsReceipt`) — réception qui alimente `StockMovement`.
-- Ajustements de stock & inventaires (`StockAdjustment`, `InventoryCount`).
-- Clients & commandes différées (`Customer`, `Order`, `Delivery`) si la superette gère aussi la livraison.
-- Paiements mobile money (`MTN_MOMO`, `AIRTEL_MONEY`) — intégration avec un fournisseur d'API réel.
-- `AuditLog` — brancher un interceptor NestJS qui journalise les actions sensibles.
-- Rapports (`REPORTS` déjà dans `PermissionResource`) — endpoints d'agrégation (`db.orm.<Model>.groupBy(...)`).
+- [x] **Achats fournisseurs** (`src/suppliers/`, `src/purchasing/`) — `Supplier` (CRUD), `PurchaseOrder` (DRAFT → SUBMITTED → APPROVED → CANCELLED, montants calculés ligne par ligne), `GoodsReceipt` (réception réelle, refusée si le PO n'est pas `APPROVED`, alimente le stock via `StockService.recordMovement(..., tx)` dans la même transaction, marque le PO `RECEIVED`). *Simplification V1 assumée : pas de suivi `PARTIALLY_RECEIVED` — toute réception marque le PO entièrement reçu.*
+- [x] **Ajustements de stock & inventaires** (`src/inventory/`) — `StockAdjustment` (créer en DRAFT avec `previousQuantity`/`newQuantity`/`difference` snapshotés, puis `POST /:id/apply` qui applique réellement la correction via `StockService` — DRAFT→APPLIED en une étape, pas de palier SUBMITTED/APPROVED séparé). `InventoryCount` (créer avec `expectedQty` snapshoté depuis le stock courant + `countedQty` saisi, puis `POST /:id/approve` qui applique les écarts via `StockMovement` type `INVENTORY_CORRECTION`).
+- [x] **Clients & livraison** (`src/customers/`, `src/delivery/`) — `Customer` + `CustomerAddress` (CRUD complet). `Delivery` **n'est pas un flux de commande autonome** : elle est créée automatiquement par `SalesService.create()` quand `fulfillment: "DELIVERY"` est passé sur une vente (le client paie en caisse, la livraison suit) — pas encore de commande web/téléphone sans passage caisse (voir limite ci-dessous). Cycle de statut `PENDING → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED/FAILED/CANCELLED`, historique dans `DeliveryStatusHistory`, transition bloquée une fois un statut terminal atteint.
+- [x] **Paiements mobile money** — fait en amont (voir entrée `src/payments/` plus haut), simulés en attendant les identifiants MTN/Airtel réels.
+- [x] **`AuditLog`** (`src/audit/`, module `@Global()`) — instrumentation **ciblée**, pas un intercepteur générique sur toutes les routes : `AuditService.log(...)` appelé explicitement après succès (jamais depuis l'intérieur d'une transaction, pour que le journal reflète ce qui s'est réellement passé) aux points sensibles déjà câblés : `LOGIN` (AuthService), `OPEN_SESSION`/`CLOSE_SESSION` (CashSessionsService), `APPROVE` sur achats et inventaires, `STOCK_ADJUSTMENT` appliqué. `GET /api/audit-logs` (filtrable `userId`/`storeId`/`action`/`resource`). Un intercepteur générique capturant automatiquement chaque requête reste possible plus tard si le besoin se confirme — pas fait ici, volontairement.
+- [x] **Rapports** (`src/reports/`) — `GET /api/reports/sales-summary`, `/stock-value` (valorisation au coût d'achat), `/top-products` — agrégés en JS après un fetch ciblé (même pattern que `CashSessionsService.close()`), adéquat à l'échelle d'une superette ; à revisiter avec de l'agrégation SQL si le volume de données grossit significativement.
+
+### Limites connues de la Phase 2 (documentées, pas des bugs)
+
+- Pas de commande client autonome (web/téléphone) sans passage en caisse — la livraison s'attache toujours à une vente POS payée. À ajouter en Phase 3 si la superette a besoin de recevoir des commandes à distance.
+- `PurchaseOrderStatus.PARTIALLY_RECEIVED` existe dans le contrat mais n'est jamais posé — toute réception (même partielle en quantité) marque le PO `RECEIVED`.
+- `StockAdjustment`/`InventoryCount` sautent les paliers `SUBMITTED` intermédiaires du contrat (`DRAFT` → directement `APPLIED`/`APPROVED`) — un seul rôle crée ET applique pour l'instant, pas de séparation demandeur/approbateur.
+- Rapports non exportables (`REPORTS:EXPORT`/`PRINT` seedés mais aucun endpoint CSV/PDF).
 
 ## Phase 3 — Qualité, exploitation
 
@@ -103,7 +110,8 @@ Le MVP point de vente est fonctionnellement complet : auth, catalogue, stock, ca
 
 Points de contrat à stabiliser tôt pour ne pas bloquer le développement du client :
 
-- [x] **Contrat d'API** : préfixe `/api` actif (`API_PREFIX` dans `.env`). Routes actuelles : `POST /api/auth/login`, `POST /api/auth/refresh`, `GET /api/auth/me`, `GET /api/users`, `GET /` (health-check public, hors préfixe).
+- [x] **Contrat d'API** : préfixe `/api` actif (`API_PREFIX` dans `.env`). Surface complète au 2026-09-02 : auth, users/roles, catalogue (categories/brands/products), stock, caisse/ventes, reçus, fournisseurs/achats, ajustements/inventaires, clients/livraison, audit-logs, reports — voir `docs/postman/` pour la liste exhaustive des routes testées.
+- [x] **Client démarré** — `Projets/app-desktop/superette/` (dossier parent), Electron Forge + React + Vite + TypeScript + Tailwind + shadcn/ui. Voir son propre `docs/` pour l'avancement côté frontend.
 - [ ] **Format des réponses & pagination** standard (ex. `{ data, meta }`) pour que le client React puisse construire des hooks génériques.
 - [ ] **Authentification côté client** : flux de login + stockage sécurisé du token dans le process principal Electron (`safeStorage`), refresh transparent. Le backend renvoie déjà `{ accessToken, refreshToken, user }` sur `/api/auth/login`.
 - [ ] **Mode offline/dégradé** : les IDs `Uuid` générés dès la création (pas d'auto-incrément) permettent en théorie une création côté client avant confirmation serveur — à confirmer si un mode caisse hors-ligne est requis.

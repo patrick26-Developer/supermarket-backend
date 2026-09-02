@@ -13,7 +13,12 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { PAYMENT_METHOD_VALUES, type PaymentMethodValue } from "../types/sales-enums";
+import {
+  FULFILLMENT_TYPE_VALUES,
+  PAYMENT_METHOD_VALUES,
+  type FulfillmentTypeValue,
+  type PaymentMethodValue,
+} from "../types/sales-enums";
 
 export class SaleItemDto {
   @IsUUID()
@@ -65,6 +70,20 @@ export class CreateSaleDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @IsOptional()
+  @IsIn(FULFILLMENT_TYPE_VALUES)
+  fulfillment?: FulfillmentTypeValue;
+
+  /** Requis si fulfillment = DELIVERY et que le client a une adresse enregistrée. */
+  @IsOptional()
+  @IsUUID()
+  deliveryAddressId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryFee?: number;
 
   @IsArray()
   @ArrayMinSize(1)

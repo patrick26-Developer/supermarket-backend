@@ -33,8 +33,12 @@ export class CashSessionsController {
 
   @RequirePermission("CASH_SESSIONS", "CLOSE")
   @Post(":id/close")
-  close(@Param("id") id: string, @Body(new ValidateBodyPipe(CloseSessionDto)) dto: CloseSessionDto) {
-    return this.sessions.close(id, dto);
+  close(
+    @Param("id") id: string,
+    @Body(new ValidateBodyPipe(CloseSessionDto)) dto: CloseSessionDto,
+    @CurrentUser() user: JwtAccessPayload,
+  ) {
+    return this.sessions.close(id, dto, user.sub);
   }
 
   @RequirePermission("CASH_SESSIONS", "CREATE")

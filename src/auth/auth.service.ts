@@ -4,6 +4,7 @@ import { JwtService, type JwtSignOptions } from "@nestjs/jwt";
 import { compare } from "bcryptjs";
 import { Temporal } from "temporal-polyfill";
 
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma.service";
 import type { LoginDto } from "./dto/login.dto";
 import type { JwtAccessPayload, JwtRefreshPayload } from "./types/jwt-payload.type";
@@ -33,6 +34,7 @@ export class AuthService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(JwtService) private readonly jwt: JwtService,
     @Inject(ConfigService) private readonly config: ConfigService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async login(dto: LoginDto): Promise<AuthResult> {
@@ -52,6 +54,14 @@ export class AuthService {
     await this.prisma.db.orm.public.User
       .where({ id: user.id })
       .update({ lastLoginAt: Temporal.Now.instant() });
+
+    await this.audit.log({
+      userId: user.id,
+      action: "LOGIN",
+      resource: "USERS",
+      resourceId: user.id,
+      description: `Connexion de ${user.email}`,
+    });
 
     return {
       ...tokens,
