@@ -111,7 +111,7 @@ Le MVP point de vente est fonctionnellement complet : auth, catalogue, stock, ca
 Points de contrat à stabiliser tôt pour ne pas bloquer le développement du client :
 
 - [x] **Contrat d'API** : préfixe `/api` actif (`API_PREFIX` dans `.env`). Surface complète au 2026-09-02 : auth, users/roles, catalogue (categories/brands/products), stock, caisse/ventes, reçus, fournisseurs/achats, ajustements/inventaires, clients/livraison, audit-logs, reports — voir `docs/postman/` pour la liste exhaustive des routes testées.
-- [x] **Client démarré** — `Projets/app-desktop/superette/` (dossier parent), Electron Forge + React + Vite + TypeScript + Tailwind + shadcn/ui. Voir son propre `docs/` pour l'avancement côté frontend.
+- [x] **Client démarré et vérifié de bout en bout** — `Projets/app-desktop/superette/supermarket-desktop/`, Electron Forge + React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui + lucide-react. Écran de connexion réel testé contre le backend (login → JWT → écran post-connexion). Voir `docs/PROGRESS.md` (entrée du 2026-09-02) pour le détail des 4 pièges Electron Forge/Vite/Tailwind v4 rencontrés et leurs correctifs.
 - [ ] **Format des réponses & pagination** standard (ex. `{ data, meta }`) pour que le client React puisse construire des hooks génériques.
 - [ ] **Authentification côté client** : flux de login + stockage sécurisé du token dans le process principal Electron (`safeStorage`), refresh transparent. Le backend renvoie déjà `{ accessToken, refreshToken, user }` sur `/api/auth/login`.
 - [ ] **Mode offline/dégradé** : les IDs `Uuid` générés dès la création (pas d'auto-incrément) permettent en théorie une création côté client avant confirmation serveur — à confirmer si un mode caisse hors-ligne est requis.
