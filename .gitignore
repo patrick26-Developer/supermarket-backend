@@ -3,3 +3,8 @@ dist/
 .env
 /.alchemy
 /.prisma-composer
+
+# Fichiers uploadés (images produits…) — voir src/uploads/. Stockage local
+# uniquement pour l'instant (pas de S3/blob storage), pas committé.
+/uploads/*
+!/uploads/.gitkeep

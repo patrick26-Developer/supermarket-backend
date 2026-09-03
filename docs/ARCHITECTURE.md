@@ -1,6 +1,6 @@
 # Architecture — Supermarket Backend (Superette)
 
-> Dernière mise à jour : 2026-08-31
+> Dernière mise à jour : 2026-09-03
 
 ## 1. Vue d'ensemble
 
@@ -66,6 +66,7 @@ supermarket-backend/
 │   ├── customers/, delivery/    # Customer/CustomerAddress, Delivery (créée par une vente DELIVERY)
 │   ├── audit/                   # @Global() — AuditService.log(...), GET /api/audit-logs
 │   ├── reports/                 # Agrégations : sales-summary, stock-value, top-products
+│   ├── uploads/                  # POST /api/uploads/product-image (multer, diskStorage)
 │   └── common/                  # ValidateBodyPipe, numeric(), generateReference(), DbLike
 ├── scripts/
 │   └── test-api.ps1            # smoke-test PowerShell de tous les endpoints
@@ -78,6 +79,7 @@ supermarket-backend/
 ├── prisma.config.ts            # config CLI Prisma (contrat, connexion, composer)
 ├── prisma-composer.config.ts   # config Composer (extensions, state)
 ├── docker-compose.yml          # Postgres 16 (port hôte 5433) + pgAdmin pour le dev local
+├── uploads/                    # fichiers uploadés (images produits…), non committé sauf .gitkeep
 └── docs/                       # ce dossier (+ docs/postman/ : collection + environnement)
 ```
 

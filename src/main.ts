@@ -1,12 +1,19 @@
 import "reflect-metadata";
 
+import { join } from "node:path";
+
 import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Fichiers uploadés (images produits…) servis en statique, hors du préfixe
+  // `/api` — voir src/uploads/uploads.controller.ts.
+  app.useStaticAssets(join(process.cwd(), "uploads"), { prefix: "/uploads" });
 
   const apiPrefix = (process.env.API_PREFIX ?? "api").trim() || "api";
   app.setGlobalPrefix(apiPrefix, {
