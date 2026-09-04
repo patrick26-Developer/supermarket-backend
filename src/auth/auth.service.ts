@@ -94,6 +94,11 @@ export class AuthService {
     return this.issueTokens({ sub: user.id, email: user.email, roles });
   }
 
+  /** Permissions effectives (resource, action) de l'utilisateur courant — voir GET /auth/me/permissions. */
+  async getPermissions(roles: RoleCode[]) {
+    return this.prisma.getEffectivePermissions(roles);
+  }
+
   private async getRoleCodes(userId: string): Promise<RoleCode[]> {
     const userRoles = await this.prisma.db.orm.public.UserRole.where({ userId })
       .include("role", (r) => r.select("code"))

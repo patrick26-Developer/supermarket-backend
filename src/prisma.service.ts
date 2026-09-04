@@ -38,4 +38,38 @@ export class PrismaService {
       .first();
     return grant !== null;
   }
+
+  /**
+   * Ensemble complet des permissions (resource, action) accordées à au
+   * moins un des rôles fournis — utilisé côté client pour n'afficher que
+   * les onglets/actions auxquels l'utilisateur a réellement droit, plutôt
+   * que de tout montrer et laisser le backend renvoyer des 403.
+   */
+  async getEffectivePermissions(
+    roleCodes: RoleCode[],
+  ): Promise<{ resource: PermissionResource; action: PermissionAction }[]> {
+    if (roleCodes.length === 0) return [];
+
+    const roles = await db.orm.public.Role
+      .where((r) => r.code.in(roleCodes))
+      .select("id")
+      .all();
+    if (roles.length === 0) return [];
+    const roleIds = roles.map((r) => r.id);
+
+    const grants = await db.orm.public.RolePermission
+      .where((rp) => rp.roleId.in(roleIds))
+      .include("permission", (p) => p.select("resource", "action"))
+      .all();
+
+    const seen = new Set<string>();
+    const result: { resource: PermissionResource; action: PermissionAction }[] = [];
+    for (const grant of grants) {
+      const key = `${grant.permission.resource}:${grant.permission.action}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ resource: grant.permission.resource, action: grant.permission.action });
+    }
+    return result;
+  }
 }

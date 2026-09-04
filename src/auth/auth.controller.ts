@@ -45,6 +45,16 @@ export class AuthController {
     return this.usersService.findOne(user.sub);
   }
 
+  /**
+   * Permissions effectives (resource, action) de l'utilisateur connecté —
+   * le client s'en sert pour n'afficher que les onglets/actions autorisés
+   * plutôt que de tout montrer et laisser le backend renvoyer des 403.
+   */
+  @Get("me/permissions")
+  permissions(@CurrentUser() user: JwtAccessPayload) {
+    return this.authService.getPermissions(user.roles);
+  }
+
   @Put("me")
   updateProfile(
     @CurrentUser() user: JwtAccessPayload,

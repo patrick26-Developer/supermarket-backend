@@ -2,6 +2,16 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-09-04 (suite) — Endpoint des permissions effectives (`GET /auth/me/permissions`)
+
+Suite au retour utilisateur "il faut attaquer un autre rôle utilisateur" : jusqu'ici, le client desktop affichait les mêmes onglets/actions à **tous** les rôles connectés — seul `USERS` était filtré côté client (sur le code de rôle, pas la permission réelle), tout le reste s'appuyait uniquement sur les 403 du backend, invisibles tant qu'on ne cliquait pas sur une action interdite.
+
+**Nouvel endpoint `GET /auth/me/permissions`** — renvoie la liste complète `{resource, action}[]` accordée au rôle de l'utilisateur connecté, résolue en base (`PrismaService.getEffectivePermissions`, nouvelle méthode : rôles → `RolePermission` → `Permission`, dédupliquée). Le client desktop la récupère une fois à la connexion et l'utilise pour n'afficher que les onglets/actions réellement autorisés (détail côté client dans `supermarket-desktop/docs/PROGRESS.md`).
+
+**Vérifié contre un compte non-admin réel** — compte `CASHIER` de test créé, permissions effectives interrogées directement (`GET /auth/me/permissions`) et confirmées identiques à `ROLE_GRANTS.CASHIER` du seed (PRODUCTS:READ, CUSTOMERS:CRUD partiel, SALES/PAYMENTS/CASH_SESSIONS, etc. — rien sur SUPPLIERS/REPORTS/AUDIT_LOGS/USERS/CATEGORIES/STOCK).
+
+**Incident et correction — mot de passe administrateur** : en testant plus tôt le flux de changement de mot de passe en libre-service (`ProfilePage`), le compte `admin@superette.local` réel a été utilisé pour la vérification et son mot de passe a été changé sans être restauré ensuite — connexion admin cassée, découvert au moment de préparer ce test. Corrigé en régénérant le hash bcrypt de `Admin@123456` et en l'appliquant directement en base (`UPDATE users SET "passwordHash" = ...`), le seul chemin possible sans accès admin actif. Connexion admin reconfirmée fonctionnelle. **Leçon retenue** : tout test futur de changement de mot de passe doit utiliser un compte de test jetable, jamais le compte admin réel de démonstration.
+
 ## 2026-09-04 — Profil en libre-service, avatar, catalogue élargi (30 produits, 4 catégories)
 
 **Profil en libre-service** — jusqu'ici, un utilisateur ne pouvait modifier ni son propre profil ni son mot de passe (seul un administrateur pouvait le faire via `PUT /users/:id` / `POST /users/:id/reset-password`, tous deux gardés par la permission `USERS`). Trois nouvelles routes sous `/auth/me*` (aucune permission spécifique, juste `JwtAuthGuard` — cohérent avec `GET /auth/me` déjà existant) :
