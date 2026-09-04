@@ -2,6 +2,23 @@
 
 > Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour le contexte technique et [ROADMAP.md](./ROADMAP.md) pour les prochaines étapes.
 
+## 2026-09-04 — Profil en libre-service, avatar, catalogue élargi (30 produits, 4 catégories)
+
+**Profil en libre-service** — jusqu'ici, un utilisateur ne pouvait modifier ni son propre profil ni son mot de passe (seul un administrateur pouvait le faire via `PUT /users/:id` / `POST /users/:id/reset-password`, tous deux gardés par la permission `USERS`). Trois nouvelles routes sous `/auth/me*` (aucune permission spécifique, juste `JwtAuthGuard` — cohérent avec `GET /auth/me` déjà existant) :
+- `GET /auth/me/profile` — profil complet (`GET /auth/me` ne renvoie que le payload JWT, insuffisant pour une page profil).
+- `PUT /auth/me` (`SelfUpdateProfileDto` — firstName/lastName/phone/avatarUrl, **pas** de `status` ni de rôles, ça reste réservé aux admins).
+- `POST /auth/me/change-password` (`ChangePasswordDto` — exige l'ancien mot de passe, contrairement au reset admin qui n'en a pas besoin).
+
+Implémenté dans `UsersService` (`updateSelf`, `changeOwnPassword`) plutôt que dupliqué dans `AuthService`, pour réutiliser `assertUnique`/le hachage bcrypt déjà en place. **Piège de câblage de module** : `AuthController` dépend de `UsersService`, mais `UsersModule` ne l'exportait pas et `AuthModule` ne l'importait pas — échec de résolution de dépendances au démarrage (`Nest can't resolve dependencies of the AuthController`), invisible à `tsc` (c'est une erreur de runtime DI, pas de type). Corrigé : `UsersModule` exporte désormais `UsersService`, `AuthModule` importe `UsersModule`.
+
+**Avatar utilisateur** — `User.avatarUrl String?` ajouté au contrat (migration additive `20260904T0933_add_user_avatar_url`, `ALTER TABLE users ADD COLUMN`, aucune perte de données). Nouvel endpoint `POST /uploads/avatar` (même famille que `/uploads/product-image`, dossier `uploads/avatars/` séparé) — **sans permission spécifique** (n'importe quel utilisateur connecté peut changer sa propre photo), contrairement à l'upload d'image produit qui exige `PRODUCTS`/`UPDATE`.
+
+**Piège tsc/multer répété** : une factorisation de `fileFilter` en fonction nommée typée explicitement avec `Express.Multer.File`/`multer.FileFilterCallback` a cassé la compilation (`tsc` a d'abord réclamé `@types/multer` — installé — puis une deuxième vague d'erreurs de variance de paramètres sur le type du callback). Revenu à des closures **inline** dans les options de `FileInterceptor` (comme le code d'origine) : le type est alors correctement inféré depuis la forme attendue par Nest, sans dépendre des types exportés par `multer` qui ne correspondent pas exactement. Retenir : sur ce controller, ne pas extraire `fileFilter`/`filename` en fonctions nommées avec des types explicites — laisser l'inférence contextuelle faire le travail.
+
+**Catalogue élargi** — retour utilisateur : plus de variété, et surtout "bien catégorisé, pas en désordre". 30 produits ajoutés (script jetable, non committé, décrit dans `supermarket-desktop/docs/PROGRESS.md`) via l'API, avec `description` renseignée sur chacun (jusqu'ici presque tous les produits existants n'en avaient pas) et stock initial posé (`POST /stock/movements`, `ADJUSTMENT_IN`). 4 nouvelles catégories créées pour éviter de tout entasser dans "Epicerie" : **Boucherie & Poissonnerie**, **Boulangerie**, **Papeterie & Librairie**, **Électronique** — 44 produits et 8 catégories au total désormais.
+
+**Nettoyage de comptes de test oubliés** — 3 comptes `test.cashier.*` créés par des scripts de vérification Playwright de sessions précédentes traînaient dans `/users` en statut ACTIVE, remontés par l'utilisateur ("trop d'utilisateurs parmi les rôles"). Passés en `ARCHIVED` via `PUT /users/:id` (pas de suppression dure exposée par l'API — cohérent avec le reste du produit, qui n'expose jamais de DELETE sur les entités qui ont un historique/des relations).
+
 ## 2026-09-03 — Upload d'images produits (`src/uploads/`)
 
 Retour utilisateur côté client desktop : coller une URL ne suffit pas, il faut pouvoir vraiment téléverser un fichier. Le backend n'avait aucune capacité d'upload jusqu'ici (`Product.imageUrl` était une simple URL externe validée `@IsUrl`).

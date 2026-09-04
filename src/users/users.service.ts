@@ -1,11 +1,13 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { Temporal } from "temporal-polyfill";
 
 import { PrismaService } from "../prisma.service";
+import type { ChangePasswordDto } from "./dto/change-password.dto";
 import type { CreateUserDto } from "./dto/create-user.dto";
 import type { ResetPasswordDto } from "./dto/reset-password.dto";
+import type { SelfUpdateProfileDto } from "./dto/self-update-profile.dto";
 import type { UpdateUserDto } from "./dto/update-user.dto";
 import type { RoleCodeValue, UserStatusValue } from "./types/user-enums";
 
@@ -16,6 +18,7 @@ const SAFE_FIELDS = [
   "firstName",
   "lastName",
   "displayName",
+  "avatarUrl",
   "status",
   "lastLoginAt",
   "passwordChangedAt",
@@ -94,6 +97,30 @@ export class UsersService {
 
   async resetPassword(id: string, dto: ResetPasswordDto): Promise<{ success: true }> {
     await this.assertExists(id);
+    const passwordHash = await hash(dto.newPassword, 12);
+    await this.prisma.db.orm.public.User.where({ id }).update({
+      passwordHash,
+      passwordChangedAt: Temporal.Now.instant(),
+    });
+    return { success: true };
+  }
+
+  /** Mise à jour de son propre profil (PUT /auth/me) — pas de status/rôles. */
+  async updateSelf(id: string, dto: SelfUpdateProfileDto) {
+    await this.assertExists(id);
+    if (dto.phone) await this.assertUnique({ phone: dto.phone, excludingId: id });
+    await this.prisma.db.orm.public.User.where({ id }).update({ ...dto });
+    return this.findOne(id);
+  }
+
+  /** Changement de son propre mot de passe — exige l'ancien, contrairement à resetPassword (réservé aux admins). */
+  async changeOwnPassword(id: string, dto: ChangePasswordDto): Promise<{ success: true }> {
+    const user = await this.prisma.db.orm.public.User.where({ id }).first();
+    if (!user) throw new NotFoundException("Utilisateur introuvable");
+
+    const valid = await compare(dto.currentPassword, user.passwordHash);
+    if (!valid) throw new UnauthorizedException("Mot de passe actuel incorrect");
+
     const passwordHash = await hash(dto.newPassword, 12);
     await this.prisma.db.orm.public.User.where({ id }).update({
       passwordHash,

@@ -417,6 +417,7 @@ model User {
   firstName       String
   lastName        String
   displayName     String?
+  avatarUrl       String?
   status          UserStatus @default(ACTIVE)
   lastLoginAt     DateTime?
   passwordChangedAt DateTime?

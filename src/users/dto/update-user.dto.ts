@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from "class-validator";
 
 import { USER_STATUS_VALUES, type UserStatusValue } from "../types/user-enums";
 
@@ -22,6 +22,10 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(32)
   phone?: string;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  avatarUrl?: string;
 
   @IsOptional()
   @IsIn(USER_STATUS_VALUES)

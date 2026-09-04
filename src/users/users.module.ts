@@ -8,5 +8,8 @@ import { UsersService } from "./users.service";
 @Module({
   controllers: [UsersController, RolesController],
   providers: [UsersService, RolesService],
+  // AuthController réutilise UsersService pour PUT/POST /auth/me* (profil,
+  // changement de mot de passe en libre-service) — voir AuthModule.
+  exports: [UsersService],
 })
 export class UsersModule {}

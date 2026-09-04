@@ -1,6 +1,6 @@
 # Architecture — Supermarket Backend (Superette)
 
-> Dernière mise à jour : 2026-09-03
+> Dernière mise à jour : 2026-09-04
 
 ## 1. Vue d'ensemble
 
@@ -53,8 +53,8 @@ supermarket-backend/
 │   │   ├── db.ts               # client runtime (`export const db`)
 │   │   ├── prisma.module.ts    # @Global() — rend PrismaService injectable partout
 │   │   └── seed.ts             # organisation/magasin par défaut, permissions, rôles, admin
-│   ├── auth/                   # login JWT, guards, RBAC (@RequirePermission)
-│   ├── users/                  # CRUD utilisateurs, rôles, reset mot de passe
+│   ├── auth/                   # login JWT, guards, RBAC (@RequirePermission), profil en libre-service (/auth/me*)
+│   ├── users/                  # CRUD utilisateurs (admin), rôles, reset mot de passe, avatarUrl
 │   ├── catalog/                # Category, Brand, Product (CRUD + recherche + lookup SKU)
 │   ├── stock/                  # Stock + StockMovement (ledger append-only)
 │   ├── cash/                   # CashRegister, CashierSession (ouvrir/fermer/mouvements)
